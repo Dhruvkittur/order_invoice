@@ -35,9 +35,12 @@ jobs:
         with:
           gradle-version: '8.2'
 
-      - name: Write local.properties
+      - name: Write local.properties and gradle.properties
         working-directory: ./android-app
-        run: echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > local.properties
+        run: |
+          echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > local.properties
+          echo "android.useAndroidX=true" > gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
 
       - name: Accept Android SDK Licenses
         run: |
