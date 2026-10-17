@@ -39,6 +39,11 @@ jobs:
         working-directory: ./android-app
         run: echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > local.properties
 
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+          yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses 2>/dev/null || true
+
       - name: Build Debug APK
         working-directory: ./android-app
         run: gradle assembleDebug --no-daemon --stacktrace
