@@ -1357,6 +1357,23 @@ async function generateExcel(orders, filename) {
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
+    /* Android Native WebApp Bridge for seamless native share & save */
+    if (window.AndroidApp && typeof window.AndroidApp.saveOrShareExcel === 'function') {
+      try {
+        let binary = '';
+        const bytes = new Uint8Array(wbout);
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const b64 = window.btoa(binary);
+        window.AndroidApp.saveOrShareExcel(b64, filename, mimeType);
+        showToast('Orders exported & ready to share!', 'success', 4000);
+        return;
+      } catch (nativeErr) {
+        console.warn('Native share error, falling back:', nativeErr);
+      }
+    }
+
     /* Mobile Web Share API: share directly to WhatsApp, Gmail, Drive, etc. */
     if (typeof navigator.share === 'function' && typeof File === 'function') {
       try {
@@ -1457,8 +1474,19 @@ async function renderItemMasterList(query) {
       '<div class="empty-state">' +
         '<div class="empty-icon">📦</div>' +
         '<div class="empty-title">Catalog is Empty</div>' +
-        '<div class="empty-sub">Import an Excel (.xlsx) file to load your shop items.</div>' +
+        '<div class="empty-sub">Import an Excel (.xlsx) file or load our sample catalog to start creating wholesale orders.</div>' +
+        '<div style="margin-top:16px; display:flex; flex-direction:column; gap:10px; width:100%">' +
+          '<button type="button" id="btn-empty-load-demo" class="btn-primary-action" style="margin-bottom:0">⚡ Load Demo Catalog (25 Items)</button>' +
+          '<button type="button" id="btn-empty-import" class="btn-secondary-action" style="margin-bottom:0">📂 Import My Excel File (.xlsx)</button>' +
+        '</div>' +
       '</div>';
+    const bDemo = document.getElementById('btn-empty-load-demo');
+    if (bDemo) bDemo.addEventListener('click', loadDemoCatalog);
+    const bImp = document.getElementById('btn-empty-import');
+    if (bImp) bImp.addEventListener('click', function () {
+      const fi = document.getElementById('item-master-file-input');
+      if (fi) fi.click();
+    });
     return;
   }
 
@@ -1845,6 +1873,109 @@ function escapeAttr(str) {
 }
 
 /* =========================================================
+   20B. DEMO CATALOG & SAMPLE TEMPLATE
+   ========================================================= */
+
+async function loadDemoCatalog() {
+  const sampleItems = [
+    { itemId: 'AASH-10', itemName: 'Aashirvaad Superior MP Atta 10kg', availableQuantity: 100, rate: 420 },
+    { itemId: 'FORT-1L', itemName: 'Fortune Sunlite Refined Sunflower Oil 1L', availableQuantity: 240, rate: 135 },
+    { itemId: 'SUGR-5K', itemName: 'Madhur Pure & Hygienic Sugar 5kg', availableQuantity: 80, rate: 230 },
+    { itemId: 'RICE-5K', itemName: 'Daawat Rozana Super Basmati Rice 5kg', availableQuantity: 60, rate: 390 },
+    { itemId: 'SALT-1K', itemName: 'Tata Salt Vacuum Evaporated 1kg', availableQuantity: 500, rate: 26 },
+    { itemId: 'TEA-GLD', itemName: 'Tata Tea Gold 500g', availableQuantity: 150, rate: 310 },
+    { itemId: 'TEA-RED', itemName: 'Red Label Natural Care Tea 500g', availableQuantity: 120, rate: 295 },
+    { itemId: 'MAGG-24', itemName: 'Maggi 2-Minute Noodles 70g (Pack of 24)', availableQuantity: 75, rate: 312 },
+    { itemId: 'PARL-80', itemName: 'Parle-G Glucose Biscuits 800g', availableQuantity: 200, rate: 72 },
+    { itemId: 'GOOD-DAY', itemName: 'Britannia Good Day Butter Cookies 600g', availableQuantity: 180, rate: 110 },
+    { itemId: 'DAL-TOOR', itemName: 'Toor Dal Desi Polished 1kg', availableQuantity: 150, rate: 165 },
+    { itemId: 'DAL-MOON', itemName: 'Moong Dal Yellow Split 1kg', availableQuantity: 120, rate: 140 },
+    { itemId: 'DAL-CHAN', itemName: 'Chana Dal Premium 1kg', availableQuantity: 140, rate: 98 },
+    { itemId: 'SPIC-HLD', itemName: 'Everest Turmeric Powder 500g', availableQuantity: 90, rate: 145 },
+    { itemId: 'SPIC-CHL', itemName: 'Everest Chilli Powder 500g', availableQuantity: 85, rate: 195 },
+    { itemId: 'DET-SURF', itemName: 'Surf Excel Easy Wash Detergent Powder 1kg', availableQuantity: 110, rate: 140 },
+    { itemId: 'DET-RIN4', itemName: 'Rin Detergent Bar 250g (Pack of 4)', availableQuantity: 160, rate: 76 },
+    { itemId: 'SOAP-DET', itemName: 'Dettol Original Bathing Soap 125g (Pack of 3)', availableQuantity: 95, rate: 155 },
+    { itemId: 'SOAP-LIF', itemName: 'Lifebuoy Total Soap 125g (Pack of 4)', availableQuantity: 130, rate: 125 },
+    { itemId: 'TOOTH-CL', itemName: 'Colgate Strong Teeth Toothpaste 500g', availableQuantity: 140, rate: 215 },
+    { itemId: 'DISH-VIM', itemName: 'Vim Lemon Dishwash Bar 300g', availableQuantity: 250, rate: 30 },
+    { itemId: 'SAUCE-KS', itemName: 'Kissan Fresh Tomato Ketchup 1kg', availableQuantity: 65, rate: 125 },
+    { itemId: 'SNK-BHUJ', itemName: 'Haldiram Bhujia Sev 1kg', availableQuantity: 70, rate: 260 },
+    { itemId: 'BUTR-AML', itemName: 'Amul Butter 500g', availableQuantity: 50, rate: 275 },
+    { itemId: 'SPIC-PEP', itemName: 'Catch Black Pepper Powder 100g', availableQuantity: 80, rate: 95 }
+  ];
+
+  try {
+    showLoading('Loading demo wholesale catalog...');
+    await dbSaveItemMaster(sampleItems, {
+      filename: 'Sample_FMCG_Catalog.xlsx',
+      importedAt: new Date().toISOString(),
+      itemCount: sampleItems.length,
+      columnsUsed: { nameCol: 'Item Name', qtyCol: 'Quantity', rateCol: 'Rate', codeCol: 'Item Code' }
+    });
+    await loadItemMasterCache();
+    await renderHome();
+    await renderItemMasterList('');
+    hideLoading();
+    showToast('Loaded 25 wholesale products into catalog!', 'success', 4000);
+  } catch (err) {
+    hideLoading();
+    console.error('Failed to load demo catalog:', err);
+    showToast('Could not load sample catalog.', 'error');
+  }
+}
+
+function downloadSampleTemplate() {
+  if (typeof XLSX === 'undefined') {
+    showToast('Excel library not loaded.', 'error');
+    return;
+  }
+  const headers = ['Item Code', 'Item Name', 'Quantity', 'Rate'];
+  const sampleData = [
+    headers,
+    ['AASH-10', 'Aashirvaad Superior MP Atta 10kg', 100, 420],
+    ['FORT-1L', 'Fortune Sunlite Refined Sunflower Oil 1L', 240, 135],
+    ['SUGR-5K', 'Madhur Pure & Hygienic Sugar 5kg', 80, 230],
+    ['RICE-5K', 'Daawat Rozana Super Basmati Rice 5kg', 60, 390],
+    ['SALT-1K', 'Tata Salt Vacuum Evaporated 1kg', 500, 26],
+    ['TEA-GLD', 'Tata Tea Gold 500g', 150, 310]
+  ];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(sampleData);
+  XLSX.utils.book_append_sheet(wb, ws, 'Items');
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const filename = 'Shop_Items_Template.xlsx';
+  const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+  if (window.AndroidApp && typeof window.AndroidApp.saveOrShareExcel === 'function') {
+    try {
+      let binary = '';
+      const bytes = new Uint8Array(wbout);
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+      const b64 = window.btoa(binary);
+      window.AndroidApp.saveOrShareExcel(b64, filename, mimeType);
+      showToast('Template downloaded & ready to share!', 'success');
+      return;
+    } catch (e) {
+      console.warn('Native download fallback:', e);
+    }
+  }
+
+  const blob = new Blob([wbout], { type: mimeType });
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () {
+    URL.revokeObjectURL(blobUrl);
+    if (a.parentNode) document.body.removeChild(a);
+  }, 2000);
+  showToast('Downloaded Shop_Items_Template.xlsx', 'success');
+}
+
+/* =========================================================
    21. WIRE ALL UI EVENTS
    ========================================================= */
 
@@ -1867,6 +1998,10 @@ function wireEvents() {
   if (btnHomeView) {
     btnHomeView.addEventListener('click', openItemMasterScreen);
   }
+  const btnHomeDemo = document.getElementById('btn-home-demo-master');
+  if (btnHomeDemo) {
+    btnHomeDemo.addEventListener('click', loadDemoCatalog);
+  }
 
   const btnBackFromMaster = document.getElementById('btn-back-from-item-master');
   if (btnBackFromMaster) {
@@ -1879,6 +2014,14 @@ function wireEvents() {
   const btnCatalogReimport = document.getElementById('btn-catalog-reimport');
   if (btnCatalogReimport && fileInput) {
     btnCatalogReimport.addEventListener('click', function () { fileInput.click(); });
+  }
+  const btnCatalogDemo = document.getElementById('btn-catalog-demo');
+  if (btnCatalogDemo) {
+    btnCatalogDemo.addEventListener('click', loadDemoCatalog);
+  }
+  const btnCatalogTemplate = document.getElementById('btn-catalog-template');
+  if (btnCatalogTemplate) {
+    btnCatalogTemplate.addEventListener('click', downloadSampleTemplate);
   }
   const btnClearMaster = document.getElementById('btn-clear-item-master');
   if (btnClearMaster) {

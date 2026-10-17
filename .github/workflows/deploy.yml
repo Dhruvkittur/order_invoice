@@ -83,7 +83,9 @@ jobs:
             2. On your phone: Settings → Security → Unknown sources (enable it)
             3. Open the downloaded APK file and tap **Install**
             4. Done! Open the app 🎉
-          files: ./AnirudhAgency.apk
+          files: |
+            ./AnirudhAgency.apk
+            ./Shop_Items.xlsx
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

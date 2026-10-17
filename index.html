@@ -185,8 +185,8 @@
             </svg>
           </div>
         </div>
-        <div class="im-card-actions">
-          <button id="btn-home-import-master" class="btn-primary-action" type="button" style="margin-bottom:0; flex:1">
+        <div class="im-card-actions" style="flex-wrap:wrap; gap:8px">
+          <button id="btn-home-import-master" class="btn-primary-action" type="button" style="margin-bottom:0; flex:1 1 45%">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
@@ -194,15 +194,19 @@
             </svg>
             Import Excel
           </button>
-          <button id="btn-home-view-master" class="btn-secondary-action" type="button" style="margin-bottom:0; flex:1">
+          <button id="btn-home-view-master" class="btn-secondary-action" type="button" style="margin-bottom:0; flex:1 1 45%">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
               <circle cx="12" cy="12" r="3"/>
             </svg>
             View Catalog
           </button>
+          <button id="btn-home-demo-master" class="btn-secondary-action" type="button" style="margin-bottom:0; flex:1 1 100%; background:rgba(45,106,79,0.12); border:1px solid #2D6A4F; color:#1B4332; font-weight:600">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            ⚡ Load Demo Catalog (25 Wholesale Items)
+          </button>
         </div>
-        <input type="file" id="item-master-file-input" accept=".xlsx, .xls" style="display:none;" />
+        <input type="file" id="item-master-file-input" accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" style="display:none;" />
       </div>
 
       <!-- Quick Actions -->
@@ -621,14 +625,24 @@
       </div>
 
       <!-- Management Actions -->
-      <div style="margin-top:24px">
-        <button type="button" id="btn-catalog-reimport" class="btn-primary-action" style="margin-bottom:12px">
+      <div style="margin-top:24px; display:flex; flex-direction:column; gap:10px">
+        <button type="button" id="btn-catalog-reimport" class="btn-primary-action" style="margin-bottom:0">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          Import / Update Excel Master
+          Import / Update Excel Master (.xlsx)
+        </button>
+
+        <button type="button" id="btn-catalog-demo" class="btn-secondary-action" style="margin-bottom:0; background:rgba(45,106,79,0.12); border:1px solid #2D6A4F; color:#1B4332; font-weight:600">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          ⚡ Load Sample Wholesale Catalog (25 Items)
+        </button>
+
+        <button type="button" id="btn-catalog-template" class="btn-secondary-action" style="margin-bottom:12px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          📥 Download Excel Template (Shop_Items.xlsx)
         </button>
 
         <div class="danger-zone">
