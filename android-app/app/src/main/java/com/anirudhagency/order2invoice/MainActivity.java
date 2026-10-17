@@ -28,7 +28,7 @@ public class MainActivity extends AppCompatActivity {
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient());
-        webView.loadUrl("https://dhruvkittur.github.io/Finance/");
+        webView.loadUrl("https://dhruvkittur.github.io/order_invoice/");
         setContentView(webView);
     }
 
