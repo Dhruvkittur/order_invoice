@@ -30,8 +30,8 @@ jobs:
           distribution: 'temurin'
           java-version: 17
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
 
       - name: Generate Gradle Wrapper
         working-directory: ./android-app
@@ -41,7 +41,7 @@ jobs:
 
       - name: Write local.properties
         working-directory: ./android-app
-        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+        run: echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > local.properties
 
       - name: Build Debug APK
         working-directory: ./android-app

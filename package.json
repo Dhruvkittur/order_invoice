@@ -1,17 +1,5 @@
 {
   "name": "anirudh-agency-order2invoice",
   "version": "1.0.0",
-  "description": "ANIRUDH AGENCY — Wholesale Sales Order Entry App",
-  "main": "local-server.js",
-  "scripts": {
-    "start": "node local-server.js --no-tunnel",
-    "dev": "node local-server.js"
-  },
-  "engines": {
-    "node": ">=18.0.0"
-  },
-  "dependencies": {},
-  "devDependencies": {
-    "localtunnel": "^2.0.2"
-  }
+  "private": true
 }
