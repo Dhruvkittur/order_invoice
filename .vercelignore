@@ -1,0 +1,6 @@
+server.js
+android-app/
+node_modules/
+start.bat
+cloudflared.exe
+*.log
