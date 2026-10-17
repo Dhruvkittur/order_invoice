@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: anirudh-agency-order2invoice
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 10000
+    healthCheckPath: /
