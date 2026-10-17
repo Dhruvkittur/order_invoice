@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - gh-pages
   workflow_dispatch:
 
 permissions:
@@ -20,6 +19,7 @@ jobs:
   build-apk:
     name: Build Android APK
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -30,18 +30,25 @@ jobs:
           distribution: 'temurin'
           java-version: 17
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate Gradle Wrapper
+        working-directory: ./android-app
+        run: |
+          gradle wrapper --gradle-version=8.2 --distribution-type=bin
+          chmod +x gradlew
+
+      - name: Write local.properties
+        working-directory: ./android-app
+        run: echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
 
       - name: Build Debug APK
         working-directory: ./android-app
-        run: |
-          gradle wrapper
-          ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Copy Built APK to Root
-        run: |
-          cp android-app/app/build/outputs/apk/debug/app-debug.apk ./AnirudhAgency.apk
+      - name: Copy Built APK
+        run: cp android-app/app/build/outputs/apk/debug/app-debug.apk ./AnirudhAgency.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -54,8 +61,16 @@ jobs:
         with:
           tag_name: v1.0.0
           name: "ANIRUDH AGENCY Mobile App (APK)"
-          body: "Direct download of ANIRUDH AGENCY Wholesale Order Entry Android app (.apk)"
+          body: |
+            ## 📱 ANIRUDH AGENCY - Wholesale Sales Order Entry
+
+            ### How to Install on Android:
+            1. Download **AnirudhAgency.apk** below
+            2. On your phone: Settings → Security → Unknown sources (enable it)
+            3. Open the downloaded APK file and tap **Install**
+            4. Done! Open the app 🎉
           files: ./AnirudhAgency.apk
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -66,6 +81,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -79,7 +95,7 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload artifact
+      - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: '.'

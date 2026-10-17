@@ -1,0 +1,6 @@
+cloudflared.exe
+node_modules/
+package-lock.json
+package.json
+deploy.js
+*.log
