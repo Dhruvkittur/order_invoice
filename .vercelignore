@@ -1,4 +1,5 @@
 server.js
+local-server.js
 android-app/
 node_modules/
 start.bat
