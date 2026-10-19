@@ -3,7 +3,7 @@
    100% Offline Progressive Web App Caching Engine
    ========================================================= */
 
-const CACHE_NAME = 'order2invoice-v1.3';
+const CACHE_NAME = 'order2invoice-v2.3.2';
 
 const PRECACHE_ASSETS = [
   './',
@@ -27,7 +27,6 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      // Use individual caching to prevent one missing file from breaking entire install
       return Promise.allSettled(
         PRECACHE_ASSETS.map((asset) =>
           cache.add(asset).catch((err) => {
@@ -55,55 +54,56 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Cache-first strategy for local assets, network fallback
+// Fetch: Network-first for code assets (ensures immediate updates), Cache-first for vendor libs/icons
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
-  // Network-only for live APIs (tunnel status, network IP)
+  // Network-only for live APIs
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(event.request));
     return;
   }
 
-  // For app navigation, serve index.html if offline
-  if (event.request.mode === 'navigate') {
+  // Network-first for navigation & core application code (app.js, style.css, index.html)
+  const isAppCode = event.request.mode === 'navigate' ||
+                    url.pathname.endsWith('/app.js') ||
+                    url.pathname.endsWith('/style.css') ||
+                    url.pathname.endsWith('/index.html') ||
+                    url.pathname === '/';
+
+  if (isAppCode) {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match('./index.html') || caches.match('./');
-      })
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(event.request).then((cached) => {
+            return cached || (event.request.mode === 'navigate' ? (caches.match('./index.html') || caches.match('./')) : null);
+          });
+        })
     );
     return;
   }
 
-  // Cache-first strategy for static resources
+  // Cache-first for heavy static assets (icons, xlsx library, fonts)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }
-
       return fetch(event.request).then((networkResponse) => {
-        // Cache valid same-origin responses
-        if (
-          networkResponse &&
-          networkResponse.status === 200 &&
-          (url.origin === location.origin || url.hostname.includes('sheetjs') || url.hostname.includes('googleapis') || url.hostname.includes('gstatic'))
-        ) {
+        if (networkResponse && networkResponse.status === 200 && url.origin === location.origin) {
           const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
         }
         return networkResponse;
-      }).catch((err) => {
-        console.warn(`[ServiceWorker] Network fetch failed for ${event.request.url}:`, err);
-        // Fallback for image requests if needed
-        if (event.request.destination === 'image') {
-          return caches.match('./icons/icon-192.png');
-        }
       });
     })
   );

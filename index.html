@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="64x64" href="icons/favicon.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2.3.0" />
   <!-- SheetJS for Excel import/export (local with CDN fallback) -->
   <script src="xlsx.full.min.js"></script>
   <script>
@@ -28,28 +28,121 @@
 <div id="app">
 
   <!-- ══════════════════════════════════════════
+       SIDEBAR OVERLAY & SLIDE-OUT DRAWER
+       ══════════════════════════════════════════ -->
+  <div id="sidebar-overlay" class="sidebar-overlay" aria-hidden="true"></div>
+  <aside id="app-sidebar" class="app-sidebar" aria-label="Sidebar Menu">
+    <div class="sidebar-header">
+      <div class="sidebar-brand">
+        <div class="brand-icon-wrap" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <path d="M16 10a4 4 0 0 1-8 0"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-name">ANIRUDH AGENCY</div>
+          <div class="brand-tagline">Wholesale FMCG & Grocery</div>
+        </div>
+      </div>
+      <button type="button" class="btn-sidebar-close" id="btn-sidebar-close" aria-label="Close Menu">✕</button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="sidebar-section-label">Navigation</div>
+      <button type="button" class="sidebar-link active" id="sidebar-link-home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Dashboard</span>
+      </button>
+      <button type="button" class="sidebar-link" id="sidebar-link-new">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Create New Order</span>
+      </button>
+      <button type="button" class="sidebar-link" id="sidebar-link-orders">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Saved Orders</span>
+      </button>
+      <button type="button" class="sidebar-link" id="sidebar-link-items">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        <span>Product Catalog</span>
+      </button>
+      <button type="button" class="sidebar-link" id="sidebar-link-customers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Customer Directory</span>
+      </button>
+      <button type="button" class="sidebar-link" id="sidebar-link-export">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export to Excel</span>
+      </button>
+    </nav>
+
+    <!-- Download Mobile App (Placed in Sidebar) -->
+    <div class="sidebar-pwa-card">
+      <div class="sidebar-pwa-header">
+        <div class="pwa-card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+            <line x1="12" y1="18" x2="12.01" y2="18"/>
+          </svg>
+        </div>
+        <div>
+          <div class="pwa-card-title">Download Mobile App</div>
+          <div class="pwa-card-sub" id="pwa-card-desc">100% offline wholesale sales</div>
+        </div>
+      </div>
+      <div class="sidebar-pwa-actions">
+        <button type="button" class="btn-sidebar-pwa-install" id="btn-pwa-install">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Install App on Device</span>
+        </button>
+        <a href="https://github.com/Dhruvkittur/order_invoice/releases/download/v1.0.0/AnirudhAgency.apk" class="btn-sidebar-pwa-apk" id="btn-pwa-apk" target="_blank">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Download APK (.apk)</span>
+        </a>
+        <button type="button" class="btn-sidebar-pwa-qr" id="btn-pwa-qr">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span>Phone QR Code</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-status-pill">
+        <span class="pulse-dot"></span>
+        <span>IndexedDB Offline Ready</span>
+      </div>
+      <div class="sidebar-ver">v1.2.0 · Local & Cloudflare Live</div>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════════════
        GLOBAL TOP HEADER
        ══════════════════════════════════════════ -->
   <header class="app-header">
-    <div class="header-brand">
-      <div class="brand-icon-wrap" aria-hidden="true">
-        <!-- Modern Grocery Basket / Store SVG -->
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+    <div class="header-left">
+      <button type="button" class="btn-hamburger" id="btn-hamburger" aria-label="Open Navigation Menu" title="Menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round">
           <line x1="3" y1="6" x2="21" y2="6"/>
-          <path d="M16 10a4 4 0 0 1-8 0"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
         </svg>
-      </div>
-      <div class="brand-text-col">
-        <span class="brand-name">ANIRUDH AGENCY</span>
-        <span class="brand-tagline">Wholesale Grocery & FMCG</span>
+      </button>
+      <div class="header-brand">
+        <div class="brand-icon-wrap" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <path d="M16 10a4 4 0 0 1-8 0"/>
+          </svg>
+        </div>
+        <div class="brand-text-col">
+          <span class="brand-name">ANIRUDH AGENCY</span>
+          <span class="brand-tagline">Wholesale Grocery & FMCG</span>
+        </div>
       </div>
     </div>
     <div class="header-actions">
-      <button type="button" class="header-install-btn" id="btn-header-install" title="Download & Install Mobile App">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-        <span id="btn-header-install-text">App</span>
-      </button>
       <div class="header-meta-pill" title="System Operational & Local IndexedDB Active">
         <span class="pulse-dot"></span>
         <span>Offline Ready</span>
@@ -89,37 +182,6 @@
           </svg>
           Create New Order
         </button>
-      </div>
-
-      <!-- Mobile App Download & Install Quick Card -->
-      <div class="mobile-app-card" id="home-pwa-card">
-        <div class="pwa-card-header">
-          <div class="pwa-card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-              <line x1="12" y1="18" x2="12.01" y2="18"/>
-            </svg>
-          </div>
-          <div class="pwa-card-text">
-            <div class="pwa-card-title">Download Mobile App</div>
-            <div class="pwa-card-sub" id="pwa-card-desc">Install on phone for 100% offline wholesale sales</div>
-          </div>
-          <span class="pwa-badge" id="pwa-status-badge">1-Tap Install</span>
-        </div>
-        <div class="pwa-card-actions">
-          <button type="button" class="btn-pwa-install" id="btn-pwa-install">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Install App on Device</span>
-          </button>
-          <a href="https://github.com/Dhruvkittur/order_invoice/releases/download/v1.0.0/AnirudhAgency.apk" class="btn-pwa-apk" id="btn-pwa-apk" target="_blank" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 14px;background:#1B4332;color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Download APK (.apk)</span>
-          </a>
-          <button type="button" class="btn-pwa-qr" id="btn-pwa-qr" title="Scan QR Code to open on phone">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-            <span>Phone QR Code</span>
-          </button>
-        </div>
       </div>
 
       <!-- Today's Stats -->
@@ -201,12 +263,54 @@
             </svg>
             View Catalog
           </button>
-          <button id="btn-home-demo-master" class="btn-secondary-action" type="button" style="margin-bottom:0; flex:1 1 100%; background:rgba(45,106,79,0.12); border:1px solid #2D6A4F; color:#1B4332; font-weight:600">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            ⚡ Load Demo Catalog (25 Wholesale Items)
-          </button>
         </div>
         <input type="file" id="item-master-file-input" accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" style="display:none;" />
+      </div>
+
+      <!-- Customer Master / Directory Section -->
+      <p class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        Customer Master & Directory
+      </p>
+      <div class="item-master-home-card customer-master-home-card">
+        <div class="im-card-top">
+          <div>
+            <div class="im-card-tag customer-card-tag">EXCEL CUSTOMER MASTER</div>
+            <div class="im-count-title" id="stat-customer-count">0 Customers</div>
+            <div class="im-updated-sub" id="stat-customer-updated">Last Updated: Never</div>
+          </div>
+          <div class="im-icon-badge customer-icon-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+        </div>
+        <div class="im-card-actions" style="flex-wrap:wrap; gap:8px">
+          <button id="btn-home-import-customers" class="btn-primary-action btn-customer-action" type="button" style="margin-bottom:0; flex:1 1 45%">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Import Excel
+          </button>
+          <button id="btn-home-view-customers" class="btn-secondary-action" type="button" style="margin-bottom:0; flex:1 1 45%">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            View Customers
+          </button>
+        </div>
+        <input type="file" id="customer-master-file-input" accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" style="display:none;" />
       </div>
 
       <!-- Quick Actions -->
@@ -269,17 +373,24 @@
       <div class="form-section">
         <div class="form-section-title">Customer Information</div>
 
-        <div class="form-group">
+        <div class="form-group" style="position:relative">
           <label for="new-customer-name">Customer / Shop Name <span class="required">*</span></label>
           <input
             type="text"
             id="new-customer-name"
             class="form-control"
-            placeholder="e.g. Sri Balaji Grocery Stores"
+            placeholder="e.g. Sri Balaji Grocery Stores (type to search directory)"
             autocomplete="off"
             autocorrect="off"
             spellcheck="false"
           />
+          <div class="autocomplete-dropdown" id="customer-autocomplete-dropdown" style="display:none">
+            <div class="ac-header">
+              <span>Matching Customers</span>
+              <span class="ac-count-badge" id="customer-ac-count">0</span>
+            </div>
+            <div class="autocomplete-list" id="customer-autocomplete-list"></div>
+          </div>
           <p class="validation-msg" id="new-customer-name-msg">Please enter customer name.</p>
         </div>
 
@@ -613,10 +724,32 @@
         </div>
       </div>
 
+      <div id="catalog-top-anchor"></div>
+
       <!-- Catalog Meta / Status Bar -->
       <div class="catalog-summary-bar">
         <span class="catalog-count-pill" id="catalog-count-badge">0 Products</span>
         <span class="catalog-updated-pill" id="catalog-updated-badge">Updated: Never</span>
+      </div>
+
+      <!-- Quick Action Bar at Top (Import / Add / Clear / Jump to Bottom) -->
+      <div class="catalog-top-actions">
+        <button type="button" class="btn-top-action btn-top-import" id="btn-catalog-top-import">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Import / Update</span>
+        </button>
+        <button type="button" class="btn-top-action btn-top-add" id="btn-catalog-top-add">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>+ Add Product</span>
+        </button>
+        <button type="button" class="btn-top-action btn-top-clear" id="btn-catalog-top-clear" title="Clear product catalog">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>Clear</span>
+        </button>
+        <button type="button" class="btn-top-action btn-top-scroll" id="btn-catalog-scroll-bottom" title="Jump to bottom of list">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+          <span class="scroll-btn-text">Bottom ⬇</span>
+        </button>
       </div>
 
       <!-- Catalog Items List -->
@@ -626,6 +759,11 @@
 
       <!-- Management Actions -->
       <div style="margin-top:24px; display:flex; flex-direction:column; gap:10px">
+        <button type="button" id="btn-catalog-add-item" class="btn-primary-action" style="margin-bottom:0; background:#2D6A4F">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          + Add New Product
+        </button>
+
         <button type="button" id="btn-catalog-reimport" class="btn-primary-action" style="margin-bottom:0">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -633,11 +771,6 @@
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
           Import / Update Excel Master (.xlsx)
-        </button>
-
-        <button type="button" id="btn-catalog-demo" class="btn-secondary-action" style="margin-bottom:0; background:rgba(45,106,79,0.12); border:1px solid #2D6A4F; color:#1B4332; font-weight:600">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          ⚡ Load Sample Wholesale Catalog (25 Items)
         </button>
 
         <button type="button" id="btn-catalog-template" class="btn-secondary-action" style="margin-bottom:12px">
@@ -657,11 +790,121 @@
         </div>
       </div>
 
+      <div id="catalog-bottom-anchor"></div>
     </div>
+    <button type="button" class="fab-scroll-jump" id="fab-catalog-jump" aria-label="Jump to bottom"><span class="scroll-btn-text">Bottom ⬇</span></button>
+  </section>
+
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 7 — CUSTOMER MASTER DIRECTORY
+       ══════════════════════════════════════════ -->
+  <section id="screen-customer-master" class="screen">
+    <div class="top-header">
+      <button class="btn-back" id="btn-back-from-customer-master" type="button" aria-label="Go back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="19" y1="12" x2="5" y2="12"/>
+          <polyline points="12 19 5 12 12 5"/>
+        </svg>
+      </button>
+      <h1>Customer Directory</h1>
+    </div>
+
+    <div class="scroll-content">
+      <!-- Live Search -->
+      <div class="search-bar-wrap">
+        <div class="search-input-wrap">
+          <span class="search-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </span>
+          <input
+            type="search"
+            id="customer-master-search-input"
+            class="search-input"
+            placeholder="Search customers by name, phone, code..."
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          />
+        </div>
+      </div>
+
+      <div id="customer-top-anchor"></div>
+
+      <!-- Directory Summary Bar -->
+      <div class="catalog-summary-bar">
+        <span class="catalog-count-pill" id="customer-count-badge">0 Customers</span>
+        <span class="catalog-updated-pill" id="customer-updated-badge">Updated: Never</span>
+      </div>
+
+      <!-- Quick Action Bar at Top (Import / Add / Clear / Jump to Bottom) -->
+      <div class="catalog-top-actions">
+        <button type="button" class="btn-top-action btn-top-import" id="btn-customer-top-import">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Import / Update</span>
+        </button>
+        <button type="button" class="btn-top-action btn-top-add" id="btn-customer-top-add">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span>+ Add Customer</span>
+        </button>
+        <button type="button" class="btn-top-action btn-top-clear" id="btn-customer-top-clear" title="Clear customer directory">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>Clear</span>
+        </button>
+        <button type="button" class="btn-top-action btn-top-scroll" id="btn-customer-scroll-bottom" title="Jump to bottom of list">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+          <span class="scroll-btn-text">Bottom ⬇</span>
+        </button>
+      </div>
+
+      <!-- Customer Cards List -->
+      <div id="customer-master-list" class="catalog-list">
+        <!-- Injected by JS -->
+      </div>
+
+      <!-- Management Actions -->
+      <div style="margin-top:24px; display:flex; flex-direction:column; gap:10px">
+        <button type="button" id="btn-customer-add" class="btn-primary-action btn-customer-action" style="margin-bottom:0">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          + Add New Customer
+        </button>
+
+        <button type="button" id="btn-customer-reimport" class="btn-primary-action" style="margin-bottom:0">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Import / Update Excel Customers (.xlsx)
+        </button>
+
+        <button type="button" id="btn-customer-template" class="btn-secondary-action" style="margin-bottom:12px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          📥 Download Customers Template (Customers_Template.xlsx)
+        </button>
+
+        <div class="danger-zone">
+          <div class="danger-zone-title">⚠️ Directory Management</div>
+          <button type="button" id="btn-clear-customer-master" class="btn-danger">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            Clear Customer Directory
+          </button>
+        </div>
+      </div>
+
+      <div id="customer-bottom-anchor"></div>
+    </div>
+    <button type="button" class="fab-scroll-jump" id="fab-customer-jump" aria-label="Jump to bottom"><span class="scroll-btn-text">Bottom ⬇</span></button>
   </section>
 
   <!-- ══════════════════════════════════════════
-       BOTTOM NAVIGATION BAR (4 Primary Tabs)
+       BOTTOM NAVIGATION BAR (5 Primary Tabs)
        ══════════════════════════════════════════ -->
   <nav class="bottom-nav" aria-label="Main Navigation">
     <button class="nav-item active" id="nav-btn-home" type="button">
@@ -698,6 +941,19 @@
         </svg>
       </span>
       <span class="nav-label">Items</span>
+    </button>
+
+    <button class="nav-item" id="nav-btn-customers" type="button">
+      <span class="nav-indicator"></span>
+      <span class="nav-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </span>
+      <span class="nav-label">Customers</span>
     </button>
 
     <button class="nav-item" id="nav-btn-export" type="button">
@@ -765,10 +1021,161 @@
       </div>
     </div>
 
+    <!-- Import Mode Selector (Update vs Replace) -->
+    <div class="import-mode-box" id="item-import-mode-box">
+      <div class="import-mode-label">Select Import Action:</div>
+      <div class="import-mode-options">
+        <label class="import-mode-card selected" id="lbl-item-mode-update">
+          <input type="radio" name="item-import-mode" value="update" checked>
+          <div class="import-mode-body">
+            <div class="import-mode-title">🔄 Update Existing List (Merge)</div>
+            <div class="import-mode-desc">Updates rates/quantities for matching items &amp; adds new items. Existing items are preserved.</div>
+          </div>
+        </label>
+        <label class="import-mode-card" id="lbl-item-mode-replace">
+          <input type="radio" name="item-import-mode" value="replace">
+          <div class="import-mode-body">
+            <div class="import-mode-title">⚠️ Replace Entire Catalog</div>
+            <div class="import-mode-desc">Overwrites and replaces existing catalog completely with this Excel sheet.</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
     <div class="preview-modal-actions">
       <button type="button" id="btn-preview-cancel" class="btn-secondary-action" style="margin-bottom:0">Cancel</button>
       <button type="button" id="btn-preview-confirm" class="btn-primary-action" style="margin-bottom:0">Import Items</button>
     </div>
+  </div>
+</div>
+
+<!-- Customer Import Preview Modal -->
+<div id="preview-customer-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="preview-customer-modal-title">
+  <div class="modal-box preview-modal-box">
+    <div class="preview-header">
+      <div class="modal-title" id="preview-customer-modal-title" style="margin-bottom:0">Import Customer Master</div>
+      <button type="button" class="btn-preview-close" id="btn-preview-customer-close-x" aria-label="Close">&#x2715;</button>
+    </div>
+
+    <div class="preview-file-section">
+      <div class="preview-field-label">Selected File:</div>
+      <div class="preview-file-name" id="preview-customer-file-name">—</div>
+      <div class="preview-badge" id="preview-customer-count-pill" style="background:#fde8e3; color:#c04a2c">✓ 0 customers detected</div>
+    </div>
+
+    <div class="preview-table-container">
+      <div class="preview-field-label" style="margin-bottom:6px">Data Preview:</div>
+      <div class="preview-table-scroll">
+        <table class="preview-table">
+          <thead>
+            <tr>
+              <th>Customer / Shop Name</th>
+              <th>Phone</th>
+              <th>Address / Area</th>
+            </tr>
+          </thead>
+          <tbody id="preview-customer-table-body">
+            <!-- Sample rows injected by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Import Mode Selector (Update vs Replace) -->
+    <div class="import-mode-box" id="customer-import-mode-box">
+      <div class="import-mode-label">Select Import Action:</div>
+      <div class="import-mode-options">
+        <label class="import-mode-card selected" id="lbl-customer-mode-update">
+          <input type="radio" name="customer-import-mode" value="update" checked>
+          <div class="import-mode-body">
+            <div class="import-mode-title">🔄 Update Existing List (Merge)</div>
+            <div class="import-mode-desc">Updates phone/address for matching customers &amp; adds new customers. Existing customers are preserved.</div>
+          </div>
+        </label>
+        <label class="import-mode-card" id="lbl-customer-mode-replace">
+          <input type="radio" name="customer-import-mode" value="replace">
+          <div class="import-mode-body">
+            <div class="import-mode-title">⚠️ Replace Entire Customer Directory</div>
+            <div class="import-mode-desc">Overwrites and replaces existing directory completely with this Excel sheet.</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="preview-modal-actions">
+      <button type="button" id="btn-preview-customer-cancel" class="btn-secondary-action" style="margin-bottom:0">Cancel</button>
+      <button type="button" id="btn-preview-customer-confirm" class="btn-primary-action btn-customer-action" style="margin-bottom:0">Import Customers</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit / Fill Item Modal -->
+<div id="item-edit-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="item-edit-modal-title">
+  <div class="modal-box edit-modal-box">
+    <div class="preview-header">
+      <div class="modal-title" id="item-edit-modal-title" style="margin-bottom:0">✏️ Edit Product Details</div>
+      <button type="button" class="btn-preview-close" id="btn-item-edit-close" aria-label="Close">&#x2715;</button>
+    </div>
+    <form id="form-item-edit" onsubmit="return false;" style="margin-top:14px">
+      <input type="hidden" id="edit-item-orig-id" value="" />
+      <div class="form-group">
+        <label for="edit-item-name">Product / Item Name <span class="required">*</span></label>
+        <input type="text" id="edit-item-name" class="form-control" placeholder="e.g. Fortune Sunflower Oil 1L" required />
+      </div>
+      <div class="form-grid-2" style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+        <div class="form-group">
+          <label for="edit-item-qty">Available Qty</label>
+          <input type="number" id="edit-item-qty" class="form-control" placeholder="0" min="0" step="any" />
+        </div>
+        <div class="form-group">
+          <label for="edit-item-rate">Rate (₹) <span class="required">*</span></label>
+          <input type="number" id="edit-item-rate" class="form-control" placeholder="0" min="0" step="any" required />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="edit-item-code">Product Code / SKU</label>
+        <input type="text" id="edit-item-code" class="form-control" placeholder="e.g. P001" />
+      </div>
+      <div class="preview-modal-actions" style="margin-top:16px; gap:8px">
+        <button type="button" id="btn-item-edit-delete" class="btn-danger" style="margin-bottom:0; flex:1">Delete</button>
+        <button type="button" id="btn-item-edit-cancel" class="btn-secondary-action" style="margin-bottom:0; flex:1">Cancel</button>
+        <button type="button" id="btn-item-edit-save" class="btn-primary-action" style="margin-bottom:0; flex:1.4">Save Product</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit / Fill Customer Modal -->
+<div id="customer-edit-modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="customer-edit-modal-title">
+  <div class="modal-box edit-modal-box">
+    <div class="preview-header">
+      <div class="modal-title" id="customer-edit-modal-title" style="margin-bottom:0">✏️ Edit Customer Details</div>
+      <button type="button" class="btn-preview-close" id="btn-customer-edit-close" aria-label="Close">&#x2715;</button>
+    </div>
+    <form id="form-customer-edit" onsubmit="return false;" style="margin-top:14px">
+      <input type="hidden" id="edit-customer-orig-id" value="" />
+      <div class="form-group">
+        <label for="edit-customer-name">Customer / Shop Name <span class="required">*</span></label>
+        <input type="text" id="edit-customer-name" class="form-control" placeholder="e.g. Mahadev Kirana Store" required />
+      </div>
+      <div class="form-group">
+        <label for="edit-customer-phone">Phone / WhatsApp Number</label>
+        <input type="tel" id="edit-customer-phone" class="form-control" placeholder="e.g. 9876543210" inputmode="tel" />
+      </div>
+      <div class="form-group">
+        <label for="edit-customer-address">Address / Town / Area</label>
+        <input type="text" id="edit-customer-address" class="form-control" placeholder="e.g. Market Yard, Shop #12" />
+      </div>
+      <div class="form-group">
+        <label for="edit-customer-code">Customer Code / ID</label>
+        <input type="text" id="edit-customer-code" class="form-control" placeholder="e.g. CUST-001" />
+      </div>
+      <div class="preview-modal-actions" style="margin-top:16px; gap:8px">
+        <button type="button" id="btn-customer-edit-delete" class="btn-danger" style="margin-bottom:0; flex:1">Delete</button>
+        <button type="button" id="btn-customer-edit-cancel" class="btn-secondary-action" style="margin-bottom:0; flex:1">Cancel</button>
+        <button type="button" id="btn-customer-edit-save" class="btn-primary-action btn-customer-action" style="margin-bottom:0; flex:1.4">Save Customer</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -875,6 +1282,6 @@
 <!-- Toast Container -->
 <div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
 
-<script src="app.js"></script>
+<script src="app.js?v=2.3.2"></script>
 </body>
 </html>

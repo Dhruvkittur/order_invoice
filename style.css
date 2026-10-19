@@ -2229,3 +2229,663 @@ textarea.form-control {
   }
 }
 
+/* ==========================================================================
+   SIDEBAR DRAWER & HIDDEN MOBILE APP DOWNLOAD
+   ========================================================================== */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-hamburger {
+  background: transparent;
+  border: none;
+  color: #FFFFFF;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: var(--radius-xs);
+  transition: background 0.15s ease;
+  line-height: 1;
+}
+
+.btn-hamburger:hover, .btn-hamburger:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 25, 18, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 998;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.28s var(--ease-smooth), visibility 0.28s;
+}
+
+.sidebar-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.app-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 320px;
+  max-width: 86vw;
+  background: #FFFFFF;
+  z-index: 999;
+  transform: translateX(-100%);
+  transition: transform 0.32s var(--ease-smooth);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.18);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-sidebar.active {
+  transform: translateX(0);
+}
+
+.sidebar-header {
+  padding: 16px;
+  background: linear-gradient(135deg, var(--primary) 0%, #204E3B 100%);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-brand .brand-name {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #FFFFFF;
+}
+
+.sidebar-brand .brand-tagline {
+  font-size: 11px;
+  color: #A3B2A9;
+}
+
+.btn-sidebar-close {
+  background: rgba(255, 255, 255, 0.18);
+  border: none;
+  color: #FFFFFF;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.btn-sidebar-close:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.sidebar-nav {
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  padding: 10px 14px 4px 14px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.sidebar-link svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke: var(--text-secondary);
+}
+
+.sidebar-link:hover, .sidebar-link.active {
+  background: var(--primary-surface);
+  color: var(--primary);
+}
+
+.sidebar-link:hover svg, .sidebar-link.active svg {
+  stroke: var(--primary);
+}
+
+/* Sidebar Download Mobile App Card */
+.sidebar-pwa-card {
+  margin: 12px 12px 16px 12px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(145deg, #1B4332 0%, #143527 100%);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(27, 67, 50, 0.2);
+}
+
+.sidebar-pwa-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sidebar-pwa-header .pwa-card-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-xs);
+  background: rgba(82, 183, 136, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar-pwa-header .pwa-card-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: #52B788;
+}
+
+.sidebar-pwa-header .pwa-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.sidebar-pwa-header .pwa-card-sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.sidebar-pwa-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-sidebar-pwa-install {
+  padding: 10px 12px;
+  background: #52B788;
+  color: #0D2818;
+  border: none;
+  border-radius: var(--radius-xs);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform 0.12s, filter 0.15s;
+}
+
+.btn-sidebar-pwa-install:hover {
+  filter: brightness(1.08);
+}
+
+.btn-sidebar-pwa-apk {
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-sidebar-pwa-apk:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-sidebar-pwa-qr {
+  padding: 8px 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-sidebar-pwa-qr:hover {
+  color: #FFFFFF;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--success);
+}
+
+.sidebar-ver {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   CUSTOMER MASTER & DIRECTORY STYLES
+   ========================================================================== */
+.customer-master-home-card {
+  border-left: 3px solid #E76F51;
+}
+
+.customer-card-tag {
+  background: rgba(231, 111, 81, 0.12) !important;
+  color: #C04A2C !important;
+}
+
+.customer-icon-badge {
+  background: rgba(231, 111, 81, 0.14) !important;
+  color: #C04A2C !important;
+}
+
+.btn-customer-action {
+  background: #E76F51 !important;
+}
+
+.btn-customer-action:hover {
+  background: #D65A3B !important;
+}
+
+.customer-item-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.customer-item-card:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.customer-item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.customer-item-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.customer-item-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--border-light);
+  color: var(--text-secondary);
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  flex-shrink: 0;
+}
+
+.customer-item-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.customer-phone-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+  background: var(--primary-surface);
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+}
+
+.customer-address-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.customer-item-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-light);
+  margin-top: 2px;
+}
+
+.btn-edit-badge {
+  background: var(--primary-surface);
+  color: var(--primary);
+  border: 1px solid rgba(45, 106, 79, 0.25);
+  border-radius: var(--radius-xs);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-edit-badge:hover {
+  background: var(--primary);
+  color: #FFFFFF;
+}
+
+/* ==========================================================================
+   INCOMPLETE / EMPTY ROW BADGES & EDIT MODAL
+   ========================================================================== */
+.badge-incomplete-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #FFF4E5;
+  color: #B25E00;
+  border: 1px solid rgba(237, 108, 2, 0.3);
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.empty-title-placeholder {
+  color: #B25E00;
+  font-style: italic;
+}
+
+.edit-modal-box {
+  max-width: 440px;
+  width: 92%;
+  padding: 22px 20px;
+}
+
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Customer autocomplete dropdown item */
+.customer-ac-item {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background 0.12s;
+}
+
+.customer-ac-item:last-child {
+  border-bottom: none;
+}
+
+.customer-ac-item:hover, .customer-ac-item.highlighted {
+  background: var(--primary-surface);
+}
+
+.customer-ac-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.customer-ac-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 8px;
+}
+
+/* ── CATALOG & DIRECTORY TOP ACTION BAR ── */
+.catalog-top-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.btn-top-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.btn-top-import {
+  background: var(--primary-main);
+  color: #FFFFFF;
+  border-color: var(--primary-main);
+}
+.btn-top-import:hover, .btn-top-import:active {
+  background: var(--primary-dark);
+}
+
+.btn-top-add {
+  background: #FFFFFF;
+  color: var(--primary-main);
+  border-color: var(--primary-main);
+}
+.btn-top-add:hover, .btn-top-add:active {
+  background: var(--primary-surface);
+}
+
+.btn-top-clear {
+  background: #FFFFFF;
+  color: var(--danger);
+  border-color: rgba(220, 53, 69, 0.35);
+  flex: 0 0 auto;
+}
+.btn-top-clear:hover, .btn-top-clear:active {
+  background: #FFF5F5;
+  border-color: var(--danger);
+}
+
+.btn-top-scroll {
+  background: #FFFFFF;
+  color: var(--text-primary);
+  border-color: var(--border-medium);
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+.btn-top-scroll:hover, .btn-top-scroll:active {
+  background: var(--bg-hover);
+  color: var(--primary-main);
+  border-color: var(--primary-main);
+}
+
+/* Floating Jump FAB Button */
+.fab-scroll-jump {
+  position: fixed;
+  right: 18px;
+  bottom: 80px;
+  z-index: 92;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 14px;
+  background: #1B4332;
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(27, 67, 50, 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.fab-scroll-jump:hover {
+  background: #2D6A4F;
+  transform: translateY(-2px);
+}
+.fab-scroll-jump:active {
+  transform: scale(0.95);
+}
+
+/* ── IMPORT MODE SELECTOR (UPDATE VS REPLACE) ── */
+.import-mode-box {
+  margin-bottom: 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.import-mode-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.import-mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.import-mode-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  background: var(--bg-card);
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.import-mode-card input[type="radio"] {
+  margin-top: 3px;
+  accent-color: var(--primary);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.import-mode-card.selected {
+  border-color: #2D6A4F;
+  background: rgba(45, 106, 79, 0.08);
+}
+
+.import-mode-card.selected.mode-replace {
+  border-color: #C0392B;
+  background: rgba(192, 57, 43, 0.08);
+}
+
+.import-mode-body {
+  flex: 1;
+}
+
+.import-mode-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.25;
+  margin-bottom: 3px;
+}
+
+.import-mode-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.btn-danger-mode {
+  background-color: #C0392B !important;
+  color: #FFFFFF !important;
+}
+.btn-danger-mode:hover {
+  background-color: #A93226 !important;
+}
+
+
+
+
+

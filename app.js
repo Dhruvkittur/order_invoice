@@ -6,12 +6,13 @@
 'use strict';
 
 /* ── CONSTANTS ─────────────────────────────────────────── */
-const DB_NAME           = 'FinovaxDB';
-const DB_VERSION        = 2; // Upgraded to v2 for Item Master & Metadata
-const STORE_ORDERS      = 'orders';
-const STORE_SEQUENCE    = 'sequence';
-const STORE_ITEM_MASTER = 'item_master';
-const STORE_META        = 'meta';
+const DB_NAME                = 'FinovaxDB';
+const DB_VERSION             = 3; // Upgraded to v3 for Customer Master Directory
+const STORE_ORDERS           = 'orders';
+const STORE_SEQUENCE         = 'sequence';
+const STORE_ITEM_MASTER      = 'item_master';
+const STORE_CUSTOMER_MASTER  = 'customer_master';
+const STORE_META             = 'meta';
 
 /* ── STATE ──────────────────────────────────────────────── */
 let db                 = null;
@@ -23,6 +24,11 @@ let isSaving           = false;
 let cachedItemMaster   = [];
 let itemMasterMetadata = { lastUpdated: null, itemCount: 0, filename: '' };
 let pendingImportData  = null;
+
+/* Customer Master in-memory cache for ultra-fast local search */
+let cachedCustomerMaster   = [];
+let customerMasterMetadata = { lastUpdated: null, customerCount: 0, filename: '' };
+let pendingCustomerImportData = null;
 
 /* =========================================================
    1. DATABASE LAYER
@@ -44,6 +50,11 @@ function initDB() {
       if (!idb.objectStoreNames.contains(STORE_ITEM_MASTER)) {
         const imStore = idb.createObjectStore(STORE_ITEM_MASTER, { keyPath: 'itemId' });
         imStore.createIndex('itemName', 'itemName', { unique: false });
+      }
+      if (!idb.objectStoreNames.contains(STORE_CUSTOMER_MASTER)) {
+        const custStore = idb.createObjectStore(STORE_CUSTOMER_MASTER, { keyPath: 'customerId' });
+        custStore.createIndex('customerName', 'customerName', { unique: false });
+        custStore.createIndex('phone', 'phone', { unique: false });
       }
       if (!idb.objectStoreNames.contains(STORE_META)) {
         idb.createObjectStore(STORE_META, { keyPath: 'key' });
@@ -221,6 +232,117 @@ async function loadItemMasterCache() {
   }
 }
 
+/* Save single item in Item Master */
+async function dbSaveItem(item) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_ITEM_MASTER, 'readwrite');
+    const st = tx.objectStore(STORE_ITEM_MASTER);
+    const req = st.put(item);
+    req.onsuccess = () => resolve(item);
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+/* Delete single item from Item Master */
+async function dbDeleteItem(itemId) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_ITEM_MASTER, 'readwrite');
+    const st = tx.objectStore(STORE_ITEM_MASTER);
+    const req = st.delete(itemId);
+    req.onsuccess = () => resolve();
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+/* ── CUSTOMER MASTER DB METHODS ────────────────────────── */
+
+/* Get all customers */
+async function dbGetCustomerMaster() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CUSTOMER_MASTER, 'readonly');
+    const st = tx.objectStore(STORE_CUSTOMER_MASTER);
+    const req = st.getAll();
+    req.onsuccess = (e) => resolve(e.target.result || []);
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+/* Save / Replace Customer Master with atomic transaction */
+async function dbSaveCustomerMaster(customers, meta) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE_CUSTOMER_MASTER, STORE_META], 'readwrite');
+    const custStore = tx.objectStore(STORE_CUSTOMER_MASTER);
+    const metaStore = tx.objectStore(STORE_META);
+
+    custStore.clear();
+
+    for (let i = 0; i < customers.length; i++) {
+      custStore.put(customers[i]);
+    }
+
+    if (meta) {
+      metaStore.put({ key: 'customerMasterMeta', value: meta });
+    }
+
+    tx.oncomplete = () => resolve();
+    tx.onerror    = (e) => reject(e.target.error);
+    tx.onabort    = (e) => reject(e.target.error);
+  });
+}
+
+/* Clear all customers from Customer Master */
+async function dbClearCustomerMaster() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE_CUSTOMER_MASTER, STORE_META], 'readwrite');
+    tx.objectStore(STORE_CUSTOMER_MASTER).clear();
+    tx.objectStore(STORE_META).delete('customerMasterMeta');
+    tx.oncomplete = () => resolve();
+    tx.onerror    = (e) => reject(e.target.error);
+  });
+}
+
+/* Save / Upsert single customer */
+async function dbSaveCustomer(cust) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CUSTOMER_MASTER, 'readwrite');
+    const st = tx.objectStore(STORE_CUSTOMER_MASTER);
+    const req = st.put(cust);
+    req.onsuccess = () => resolve(cust);
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+/* Delete single customer */
+async function dbDeleteCustomer(customerId) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CUSTOMER_MASTER, 'readwrite');
+    const st = tx.objectStore(STORE_CUSTOMER_MASTER);
+    const req = st.delete(customerId);
+    req.onsuccess = () => resolve();
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+/* Load customer master and metadata into in-memory cache */
+async function loadCustomerMasterCache() {
+  try {
+    cachedCustomerMaster = await dbGetCustomerMaster();
+    const meta = await dbGetMeta('customerMasterMeta');
+    if (meta) {
+      customerMasterMetadata = meta;
+    } else {
+      customerMasterMetadata = {
+        lastUpdated: cachedCustomerMaster.length > 0 ? getTodayISO() : null,
+        customerCount: cachedCustomerMaster.length,
+        filename: ''
+      };
+    }
+  } catch (err) {
+    console.error('Failed to load customer master cache:', err);
+    cachedCustomerMaster = [];
+  }
+}
+
 /* =========================================================
    2. DATE & CURRENCY HELPERS
    ========================================================= */
@@ -265,13 +387,29 @@ function sanitizeNumber(val, fallback) {
    ========================================================= */
 
 const screens = {
-  home:        document.getElementById('screen-home'),
-  newOrder:    document.getElementById('screen-new-order'),
-  savedOrders: document.getElementById('screen-saved-orders'),
-  viewOrder:   document.getElementById('screen-view-order'),
-  export:      document.getElementById('screen-export'),
-  itemMaster:  document.getElementById('screen-item-master')
+  home:           document.getElementById('screen-home'),
+  newOrder:       document.getElementById('screen-new-order'),
+  savedOrders:    document.getElementById('screen-saved-orders'),
+  viewOrder:      document.getElementById('screen-view-order'),
+  export:         document.getElementById('screen-export'),
+  itemMaster:     document.getElementById('screen-item-master'),
+  customerMaster: document.getElementById('screen-customer-master')
 };
+
+/* ── SIDEBAR DRAWER CONTROLS ── */
+function openSidebar() {
+  const sidebar = document.getElementById('app-sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (sidebar) sidebar.classList.add('active');
+  if (overlay) overlay.classList.add('active');
+}
+
+function closeSidebar() {
+  const sidebar = document.getElementById('app-sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (sidebar) sidebar.classList.remove('active');
+  if (overlay) overlay.classList.remove('active');
+}
 
 function showScreen(name, updateHistory) {
   if (updateHistory === undefined) updateHistory = true;
@@ -288,10 +426,11 @@ function showScreen(name, updateHistory) {
 
   /* Synchronize bottom navigation */
   const navMap = {
-    home:        'nav-btn-home',
-    savedOrders: 'nav-btn-orders',
-    itemMaster:  'nav-btn-catalog',
-    export:      'nav-btn-export'
+    home:           'nav-btn-home',
+    savedOrders:    'nav-btn-orders',
+    itemMaster:     'nav-btn-catalog',
+    customerMaster: 'nav-btn-customers',
+    export:         'nav-btn-export'
   };
 
   const allNavBtns = document.querySelectorAll('.bottom-nav .nav-item');
@@ -300,6 +439,24 @@ function showScreen(name, updateHistory) {
   if (navMap[name]) {
     const activeBtn = document.getElementById(navMap[name]);
     if (activeBtn) activeBtn.classList.add('active');
+  }
+
+  /* Synchronize sidebar navigation */
+  const sidebarMap = {
+    home:           'sidebar-link-home',
+    newOrder:       'sidebar-link-new',
+    savedOrders:    'sidebar-link-orders',
+    itemMaster:     'sidebar-link-items',
+    customerMaster: 'sidebar-link-customers',
+    export:         'sidebar-link-export'
+  };
+
+  const allSidebarLinks = document.querySelectorAll('.sidebar-link');
+  allSidebarLinks.forEach(l => l.classList.remove('active'));
+
+  if (sidebarMap[name]) {
+    const activeLink = document.getElementById(sidebarMap[name]);
+    if (activeLink) activeLink.classList.add('active');
   }
 }
 
@@ -405,6 +562,22 @@ async function renderHome() {
       itemUpdatedEl.textContent = 'Last Updated: ' + formatDateForDisplay(today);
     } else {
       itemUpdatedEl.textContent = 'Last Updated: Never';
+    }
+  }
+
+  /* Customer Master summary on Home screen */
+  const custCountEl   = document.getElementById('stat-customer-count');
+  const custUpdatedEl = document.getElementById('stat-customer-updated');
+  if (custCountEl) {
+    custCountEl.textContent = cachedCustomerMaster.length + (cachedCustomerMaster.length === 1 ? ' Customer' : ' Customers');
+  }
+  if (custUpdatedEl) {
+    if (customerMasterMetadata && customerMasterMetadata.lastUpdated) {
+      custUpdatedEl.textContent = 'Last Updated: ' + formatDateForDisplay(customerMasterMetadata.lastUpdated);
+    } else if (cachedCustomerMaster.length > 0) {
+      custUpdatedEl.textContent = 'Last Updated: ' + formatDateForDisplay(today);
+    } else {
+      custUpdatedEl.textContent = 'Last Updated: Never';
     }
   }
 
@@ -1474,19 +1647,19 @@ async function renderItemMasterList(query) {
       '<div class="empty-state">' +
         '<div class="empty-icon">📦</div>' +
         '<div class="empty-title">Catalog is Empty</div>' +
-        '<div class="empty-sub">Import an Excel (.xlsx) file or load our sample catalog to start creating wholesale orders.</div>' +
+        '<div class="empty-sub">Import your Excel file (.xlsx) or tap "+ Add Product" to create products.</div>' +
         '<div style="margin-top:16px; display:flex; flex-direction:column; gap:10px; width:100%">' +
-          '<button type="button" id="btn-empty-load-demo" class="btn-primary-action" style="margin-bottom:0">⚡ Load Demo Catalog (25 Items)</button>' +
-          '<button type="button" id="btn-empty-import" class="btn-secondary-action" style="margin-bottom:0">📂 Import My Excel File (.xlsx)</button>' +
+          '<button type="button" id="btn-empty-import" class="btn-primary-action" style="margin-bottom:0">📂 Import My Excel File (.xlsx)</button>' +
+          '<button type="button" id="btn-empty-add-item" class="btn-secondary-action" style="margin-bottom:0">+ Add Product Manually</button>' +
         '</div>' +
       '</div>';
-    const bDemo = document.getElementById('btn-empty-load-demo');
-    if (bDemo) bDemo.addEventListener('click', loadDemoCatalog);
     const bImp = document.getElementById('btn-empty-import');
     if (bImp) bImp.addEventListener('click', function () {
       const fi = document.getElementById('item-master-file-input');
       if (fi) fi.click();
     });
+    const bAdd = document.getElementById('btn-empty-add-item');
+    if (bAdd) bAdd.addEventListener('click', openAddNewItemModal);
     return;
   }
 
@@ -1509,15 +1682,38 @@ async function renderItemMasterList(query) {
   filtered.forEach(function (item) {
     const card = document.createElement('div');
     card.className = 'catalog-item-card';
+    const isIncomplete = !item.itemName || item.isEmpty;
+    const nameDisplay = item.itemName
+      ? escapeHtml(item.itemName)
+      : '<span class="empty-title-placeholder">(Empty Product Name — Tap to Fill)</span>';
+
     card.innerHTML =
       '<div class="catalog-item-top">' +
-        '<div class="catalog-item-name">' + escapeHtml(item.itemName) + '</div>' +
+        '<div style="display:flex; flex-direction:column; gap:4px; flex:1">' +
+          '<div class="catalog-item-name">' + nameDisplay + '</div>' +
+          (isIncomplete ? '<span class="badge-incomplete-tag">⚠️ Empty / Incomplete — Tap Edit</span>' : '') +
+        '</div>' +
         (item.itemId ? '<span class="catalog-item-code">' + escapeHtml(item.itemId) + '</span>' : '') +
       '</div>' +
-      '<div class="catalog-item-details">' +
-        '<span class="catalog-qty-badge">Available: ' + item.availableQuantity + '</span>' +
-        '<span class="catalog-rate-badge">&#8377;' + item.rate + '</span>' +
+      '<div class="catalog-item-details" style="justify-content:space-between; align-items:center">' +
+        '<div style="display:flex; gap:8px; align-items:center">' +
+          '<span class="catalog-qty-badge">Stock: ' + (item.availableQuantity !== undefined ? item.availableQuantity : 0) + '</span>' +
+          '<span class="catalog-rate-badge">&#8377;' + (item.rate !== undefined ? item.rate : 0) + '</span>' +
+        '</div>' +
+        '<button type="button" class="btn-edit-badge" data-item-id="' + escapeAttr(item.itemId) + '">✏️ Edit / Fill</button>' +
       '</div>';
+
+    const editBtn = card.querySelector('.btn-edit-badge');
+    if (editBtn) {
+      editBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openEditItemModal(item.itemId);
+      });
+    }
+    card.addEventListener('click', function () {
+      openEditItemModal(item.itemId);
+    });
+
     listEl.appendChild(card);
   });
 }
@@ -1550,27 +1746,65 @@ function confirmClearItemMaster() {
   });
 }
 
-/** Tolerant Excel column header mapping (Section 14) */
-function detectItemMasterColumns(headerRow) {
-  const norm = headerRow.map(function (c) {
-    return String(c || '').toLowerCase().trim().replace(/[\r\n\t_]+/g, ' ').replace(/\s+/g, ' ');
-  });
+/** Helper to extract numeric quantity from string like "19 NOS", "0 NOS", or raw number */
+function parseExcelQuantity(raw) {
+  if (raw === null || raw === undefined) return 0;
+  if (typeof raw === 'number') return isNaN(raw) ? 0 : Math.max(0, raw);
+  const str = String(raw).trim().replace(/,/g, '');
+  if (!str) return 0;
+  const match = str.match(/-?\d+(?:\.\d+)?/);
+  return match ? Math.max(0, parseFloat(match[0])) : 0;
+}
 
-  const nameAliases = [
-    'item name', 'product name', 'item', 'product', 'name',
-    'item_name', 'product_name', 'description', 'particulars'
-  ];
-  const qtyAliases = [
-    'quantity', 'qty', 'stock', 'available qty', 'available quantity',
-    'avail qty', 'available stock', 'stock qty', 'opening stock', 'units', 'count'
-  ];
-  const rateAliases = [
-    'rate', 'price', 'selling price', 'unit price', 'mrp', 'cost',
-    'unit rate', 'item rate', 'amount per unit'
-  ];
-  const codeAliases = [
-    'item code', 'product code', 'code', 'sku', 'item id', 'id', 'product id'
-  ];
+/** Helper to extract numeric rate from string or number */
+function parseExcelRate(raw) {
+  if (raw === null || raw === undefined) return 0;
+  if (typeof raw === 'number') return isNaN(raw) ? 0 : Math.max(0, Math.round(raw * 100) / 100);
+  const str = String(raw).trim().replace(/[₹$,]/g, '');
+  if (!str) return 0;
+  const match = str.match(/-?\d+(?:\.\d+)?/);
+  return match ? Math.max(0, Math.round(parseFloat(match[0]) * 100) / 100) : 0;
+}
+
+/** Intelligent Header & Column detection for Item Master (supports Tally Stock Summary & standard templates) */
+function detectItemMasterHeaderAndColumns(rawRows) {
+  let headerRowIndex = -1;
+  const maxScan = Math.min(rawRows.length, 35);
+
+  // Scan for header row
+  for (let r = 0; r < maxScan; r++) {
+    const row = rawRows[r];
+    if (!Array.isArray(row) || row.filter(c => c !== null && c !== undefined && String(c).trim() !== '').length < 2) continue;
+
+    const cells = row.map(c => String(c || '').toLowerCase().trim().replace(/[\r\n\t_]+/g, ' ').replace(/\s+/g, ' '));
+    const hasPartic = cells.some(c => c === 'particulars' || c.startsWith('particulars'));
+    const hasItemName = cells.some(c => c === 'item name' || c === 'product name' || c === 'item' || c === 'product' || c === 'description');
+    const hasQty = cells.some(c => c === 'quantity' || c === 'qty' || c === 'stock' || c.includes('closing balance'));
+    const hasRate = cells.some(c => c === 'rate' || c === 'price' || c === 'mrp');
+
+    if ((hasPartic && (hasQty || hasRate)) || (hasItemName && (hasQty || hasRate)) || (hasPartic && cells.filter(Boolean).length >= 2)) {
+      headerRowIndex = r;
+      break;
+    }
+  }
+
+  // Fallback scan: check for 'particulars' or 'item name'
+  if (headerRowIndex === -1) {
+    for (let r = 0; r < maxScan; r++) {
+      const row = rawRows[r];
+      if (!Array.isArray(row) || row.filter(Boolean).length < 2) continue;
+      const cells = row.map(c => String(c || '').toLowerCase().trim());
+      if (cells.some(c => c === 'particulars' || c === 'item name' || c === 'product name')) {
+        headerRowIndex = r;
+        break;
+      }
+    }
+  }
+
+  if (headerRowIndex === -1) headerRowIndex = 0;
+
+  const headerRow = rawRows[headerRowIndex] || [];
+  const norm = headerRow.map(c => String(c || '').toLowerCase().trim().replace(/[\r\n\t_]+/g, ' ').replace(/\s+/g, ' '));
 
   let nameIdx = -1, qtyIdx = -1, rateIdx = -1, codeIdx = -1;
 
@@ -1578,49 +1812,47 @@ function detectItemMasterColumns(headerRow) {
     const val = norm[i];
     if (!val) continue;
 
-    if (nameIdx === -1 && nameAliases.includes(val)) {
+    if (nameIdx === -1 && (
+      val === 'particulars' || val === 'item name' || val === 'product name' ||
+      val === 'item' || val === 'product' || val === 'description' || val === 'name'
+    )) {
       nameIdx = i;
-    } else if (qtyIdx === -1 && qtyAliases.includes(val)) {
+    } else if (qtyIdx === -1 && (
+      val === 'quantity' || val === 'qty' || val === 'stock' || val === 'available qty' ||
+      val === 'closing balance' || val.includes('quantity') || val.includes('qty') || val.includes('stock')
+    )) {
       qtyIdx = i;
-    } else if (rateIdx === -1 && rateAliases.includes(val)) {
+    } else if (rateIdx === -1 && (
+      val === 'rate' || val === 'price' || val === 'mrp' || val === 'unit rate' ||
+      val.includes('rate') || val.includes('price')
+    )) {
       rateIdx = i;
-    } else if (codeIdx === -1 && codeAliases.includes(val)) {
+    } else if (codeIdx === -1 && (
+      val.includes('code') || val.includes('sku') || val.includes('item id') || val === 'id'
+    )) {
       codeIdx = i;
     }
   }
 
-  // Tolerant includes check
-  if (nameIdx === -1) {
-    for (let i = 0; i < norm.length; i++) {
-      if (norm[i].includes('name') || norm[i].includes('item') || norm[i].includes('product')) {
-        nameIdx = i; break;
-      }
-    }
-  }
-  if (qtyIdx === -1) {
-    for (let i = 0; i < norm.length; i++) {
-      if (norm[i].includes('qty') || norm[i].includes('quantity') || norm[i].includes('stock')) {
-        qtyIdx = i; break;
-      }
-    }
-  }
-  if (rateIdx === -1) {
-    for (let i = 0; i < norm.length; i++) {
-      if (norm[i].includes('rate') || norm[i].includes('price') || norm[i].includes('mrp')) {
-        rateIdx = i; break;
-      }
-    }
-  }
+  // Tally Stock Summary layout: Particulars (col 0), Quantity (col 1), Rate (col 2), Value (col 3)
+  if (nameIdx === -1 && norm[0] && norm[0].includes('partic')) nameIdx = 0;
+  if (nameIdx === 0 && qtyIdx === -1 && norm.length > 1) qtyIdx = 1;
+  if (nameIdx === 0 && rateIdx === -1 && norm.length > 2) rateIdx = 2;
 
-  return { nameIdx: nameIdx, qtyIdx: qtyIdx, rateIdx: rateIdx, codeIdx: codeIdx };
+  // Fallback defaults if still unresolved
+  if (nameIdx === -1) nameIdx = 0;
+  if (qtyIdx === -1 && norm.length > 1) qtyIdx = 1;
+  if (rateIdx === -1 && norm.length > 2) rateIdx = 2;
+
+  return { headerRowIndex, cols: { nameIdx, qtyIdx, rateIdx, codeIdx } };
 }
 
-/** File input change handler (Section 1) */
+/** File input change handler for Item Master */
 function handleExcelFileSelect(e) {
   const file = e.target.files && e.target.files[0];
   if (!file) return;
 
-  // Reset file input so selecting the same file again works
+  // Reset file input so selecting the same file again triggers change event
   e.target.value = '';
 
   if (typeof XLSX === 'undefined') {
@@ -1637,7 +1869,19 @@ function handleExcelFileSelect(e) {
         showToast('Excel file has no sheets.', 'error');
         return;
       }
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+      // Prioritize Stock Summary or items sheet if present
+      let targetSheetName = workbook.SheetNames[0];
+      const preferredSheets = ['stock summary', 'stock', 'items', 'products', 'item master'];
+      for (let s = 0; s < workbook.SheetNames.length; s++) {
+        const sName = workbook.SheetNames[s].trim().toLowerCase();
+        if (preferredSheets.includes(sName)) {
+          targetSheetName = workbook.SheetNames[s];
+          break;
+        }
+      }
+
+      const sheet = workbook.Sheets[targetSheetName];
       const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
       processExcelItemRows(file.name, rawRows);
     } catch (err) {
@@ -1651,114 +1895,92 @@ function handleExcelFileSelect(e) {
   reader.readAsArrayBuffer(file);
 }
 
-/** Process raw rows from Excel (Sections 14, 15) */
+/** Process raw rows from Excel — Tolerant of empty rows & allows filling later */
 function processExcelItemRows(filename, rawRows) {
   if (!rawRows || rawRows.length < 2) {
     showToast('Excel file does not contain enough data rows.', 'warning');
     return;
   }
 
-  // Find header row (check first 6 rows)
-  let headerRowIndex = -1;
-  let cols = null;
+  const detected = detectItemMasterHeaderAndColumns(rawRows);
+  const headerRowIndex = detected.headerRowIndex;
+  const cols = detected.cols;
 
-  for (let r = 0; r < Math.min(rawRows.length, 6); r++) {
-    const row = rawRows[r];
-    if (Array.isArray(row) && row.length > 0) {
-      const detected = detectItemMasterColumns(row);
-      if (detected.nameIdx !== -1 && detected.qtyIdx !== -1 && detected.rateIdx !== -1) {
-        headerRowIndex = r;
-        cols = detected;
-        break;
-      }
-    }
-  }
-
-  if (headerRowIndex === -1 || !cols) {
+  if (headerRowIndex === -1 || !cols || cols.nameIdx === -1) {
     showConfirmModal({
       icon: '✕',
       title: 'Unable to identify required columns.',
-      message: 'Please ensure your Excel contains:\nItem Name\nQuantity\nRate',
+      message: 'Please ensure your Excel contains columns like:\nParticulars / Item Name\nQuantity\nRate',
       confirmText: 'OK',
       cancelText: 'Close'
     });
     return;
+  }
+
+  // Find the last row with any cell content (to avoid infinite blank trailing rows)
+  let lastContentIndex = headerRowIndex;
+  for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
+    const row = rawRows[r];
+    if (Array.isArray(row) && row.some(function (cell) {
+      return cell !== null && cell !== undefined && String(cell).trim() !== '';
+    })) {
+      lastContentIndex = r;
+    }
   }
 
   const validItems = [];
   const seenNames = new Map();
   const duplicateNames = [];
 
-  for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
-    const row = rawRows[r];
-    if (!row || !Array.isArray(row)) continue;
+  // Import up to last row with content (retains all internal empty rows for filling later)
+  const maxRow = Math.min(rawRows.length, Math.max(lastContentIndex + 1, headerRowIndex + 1));
+  for (let r = headerRowIndex + 1; r < maxRow; r++) {
+    const row = rawRows[r] || [];
 
-    // Check if completely empty row
-    const hasContent = row.some(function (cell) {
-      return cell !== null && cell !== undefined && String(cell).trim() !== '';
-    });
-    if (!hasContent) continue;
+    const rawName = cols.nameIdx !== -1 && row[cols.nameIdx] !== undefined ? String(row[cols.nameIdx]).trim() : '';
 
-    const rawName = String(row[cols.nameIdx] !== undefined ? row[cols.nameIdx] : '').trim();
-    if (!rawName) {
-      showToast('Row ' + (r + 1) + ': Item Name cannot be blank.', 'error', 4000);
-      return;
+    // Skip summary / grand total rows commonly generated by Tally
+    const lowerName = rawName.toLowerCase();
+    if (lowerName === 'total' || lowerName === 'grand total' || lowerName.startsWith('total ') || lowerName === 'closing balance') {
+      continue;
     }
 
-    const rawQty = row[cols.qtyIdx];
-    const qty = parseFloat(rawQty);
-    if (isNaN(qty) || !isFinite(qty) || qty < 0) {
-      showToast('Row ' + (r + 1) + ' ("' + rawName + '"): Quantity must be a non-negative number.', 'error', 4000);
-      return;
-    }
-
-    const rawRate = row[cols.rateIdx];
-    const rate = parseFloat(rawRate);
-    if (isNaN(rate) || !isFinite(rate) || rate < 0) {
-      showToast('Row ' + (r + 1) + ' ("' + rawName + '"): Rate must be a non-negative number.', 'error', 4000);
-      return;
-    }
+    const rawQty  = cols.qtyIdx !== -1 ? row[cols.qtyIdx] : 0;
+    const qty     = parseExcelQuantity(rawQty);
+    const rawRate = cols.rateIdx !== -1 ? row[cols.rateIdx] : 0;
+    const rate    = parseExcelRate(rawRate);
 
     const code = cols.codeIdx !== -1 && row[cols.codeIdx] !== undefined && String(row[cols.codeIdx]).trim() !== ''
       ? String(row[cols.codeIdx]).trim()
       : ('P' + String(validItems.length + 1).padStart(3, '0'));
 
-    // Duplicate detection (Section 15)
-    const lower = rawName.toLowerCase();
-    if (seenNames.has(lower)) {
-      if (!duplicateNames.includes(rawName)) {
-        duplicateNames.push(rawName);
+    // Duplicate detection on non-empty names
+    if (rawName) {
+      if (seenNames.has(lowerName)) {
+        if (!duplicateNames.includes(rawName)) duplicateNames.push(rawName);
+      } else {
+        seenNames.set(lowerName, true);
       }
-    } else {
-      seenNames.set(lower, true);
     }
 
     validItems.push({
       itemId: code,
       itemName: rawName,
       availableQuantity: qty,
-      rate: rate
+      rate: rate,
+      isEmpty: !rawName
     });
   }
 
-  // Duplicate items warning (Section 15)
   if (duplicateNames.length > 0) {
-    showConfirmModal({
-      icon: '⚠️',
-      title: duplicateNames.length + ' duplicate item name' + (duplicateNames.length > 1 ? 's' : '') + ' found.',
-      message: 'Found duplicates such as "' + duplicateNames[0] + '".\n\nPlease review your Excel file before importing.',
-      confirmText: 'OK',
-      cancelText: 'Close'
-    });
-    return;
+    showToast(duplicateNames.length + ' duplicate product name(s) detected in file.', 'warning', 4000);
   }
 
   if (validItems.length === 0) {
-    showToast('No valid items found to import.', 'warning');
+    showToast('No items found in sheet.', 'warning');
     return;
   }
 
-  // Show Import Preview (Section 2)
   pendingImportData = {
     filename: filename,
     items: validItems
@@ -1767,11 +1989,29 @@ function processExcelItemRows(filename, rawRows) {
   showImportPreview(filename, validItems);
 }
 
-/** Show Import Preview Dialog (Section 2) */
+/** Show Import Preview Dialog */
 function showImportPreview(filename, items) {
   document.getElementById('preview-file-name').textContent = filename;
-  document.getElementById('preview-count-pill').textContent = '✓ ' + items.length + ' item' + (items.length !== 1 ? 's' : '') + ' detected';
-  document.getElementById('btn-preview-confirm').textContent = 'Import ' + items.length + ' Items';
+  const emptyCount = items.filter(it => it.isEmpty).length;
+  let pillText = '✓ ' + items.length + ' item' + (items.length !== 1 ? 's' : '') + ' detected';
+  if (emptyCount > 0) {
+    pillText += ' (' + emptyCount + ' empty - can fill later)';
+  }
+  document.getElementById('preview-count-pill').textContent = pillText;
+
+  const modeBox = document.getElementById('item-import-mode-box');
+  const btnConfirm = document.getElementById('btn-preview-confirm');
+
+  if (cachedItemMaster && cachedItemMaster.length > 0) {
+    if (modeBox) modeBox.style.display = 'block';
+    setItemImportMode('update');
+  } else {
+    if (modeBox) modeBox.style.display = 'none';
+    if (btnConfirm) {
+      btnConfirm.textContent = 'Import ' + items.length + ' Items';
+      btnConfirm.classList.remove('btn-danger-mode');
+    }
+  }
 
   const tbody = document.getElementById('preview-table-body');
   tbody.innerHTML = '';
@@ -1780,8 +2020,12 @@ function showImportPreview(filename, items) {
   for (let i = 0; i < previewCount; i++) {
     const item = items[i];
     const tr = document.createElement('tr');
+    const nameDisplay = item.itemName
+      ? '<strong>' + escapeHtml(item.itemName) + '</strong>'
+      : '<em style="color:#B25E00; font-weight:600">Empty Row (Fill Later)</em>';
+
     tr.innerHTML =
-      '<td><strong>' + escapeHtml(item.itemName) + '</strong></td>' +
+      '<td>' + nameDisplay + '</td>' +
       '<td style="text-align:right">' + item.availableQuantity + '</td>' +
       '<td style="text-align:right">&#8377;' + item.rate + '</td>';
     tbody.appendChild(tr);
@@ -1799,47 +2043,148 @@ function showImportPreview(filename, items) {
   document.getElementById('preview-modal-overlay').classList.add('active');
 }
 
+function setItemImportMode(mode) {
+  const lblUpdate = document.getElementById('lbl-item-mode-update');
+  const lblReplace = document.getElementById('lbl-item-mode-replace');
+  const radioUpdate = document.querySelector('input[name="item-import-mode"][value="update"]');
+  const radioReplace = document.querySelector('input[name="item-import-mode"][value="replace"]');
+  const btnConfirm = document.getElementById('btn-preview-confirm');
+  const count = pendingImportData ? pendingImportData.items.length : 0;
+
+  if (mode === 'replace') {
+    if (radioReplace) radioReplace.checked = true;
+    if (lblReplace) lblReplace.classList.add('selected', 'mode-replace');
+    if (lblUpdate) lblUpdate.classList.remove('selected');
+    if (btnConfirm) {
+      btnConfirm.textContent = '⚠️ Replace Catalog (' + count + ' Items)';
+      btnConfirm.classList.add('btn-danger-mode');
+    }
+  } else {
+    if (radioUpdate) radioUpdate.checked = true;
+    if (lblUpdate) lblUpdate.classList.add('selected');
+    if (lblReplace) lblReplace.classList.remove('selected', 'mode-replace');
+    if (btnConfirm) {
+      btnConfirm.textContent = '🔄 Update & Merge (' + count + ' Items)';
+      btnConfirm.classList.remove('btn-danger-mode');
+    }
+  }
+}
+
 function hideImportPreview() {
   document.getElementById('preview-modal-overlay').classList.remove('active');
 }
 
-/** Handle tap on Import [N] Items button (Section 2) */
+/** Handle tap on Import / Update Items button */
 function handleImportConfirm() {
   if (!pendingImportData) return;
 
-  if (cachedItemMaster.length > 0) {
-    // Section 2: If an existing item master exists, clearly ask:
-    showConfirmModal({
-      icon: '⚠️',
-      title: 'Replace existing item master?',
-      message: 'The current product list will be replaced by the newly imported Excel data.',
-      confirmText: 'Replace',
-      cancelText: 'Cancel',
-      confirmClass: 'btn-modal-confirm',
-      onConfirm: async function () {
-        await executeSaveItemMaster();
-      }
-    });
+  const modeRadio = document.querySelector('input[name="item-import-mode"]:checked');
+  const mode = (cachedItemMaster && cachedItemMaster.length > 0 && modeRadio) ? modeRadio.value : 'replace';
+
+  if (cachedItemMaster && cachedItemMaster.length > 0) {
+    if (mode === 'replace') {
+      showConfirmModal({
+        icon: '⚠️',
+        title: 'Replace entire item catalog?',
+        message: 'The current ' + cachedItemMaster.length + ' items in your catalog will be overwritten by this Excel file.',
+        confirmText: 'Replace All',
+        cancelText: 'Cancel',
+        confirmClass: 'btn-modal-confirm',
+        onConfirm: async function () {
+          await executeSaveItemMaster('replace');
+        }
+      });
+    } else {
+      showConfirmModal({
+        icon: '🔄',
+        title: 'Update & Merge catalog?',
+        message: 'Matching items will be updated with new rates & stock, and new items will be added. Your existing ' + cachedItemMaster.length + ' items will be preserved.',
+        confirmText: 'Update & Merge',
+        cancelText: 'Cancel',
+        confirmClass: 'btn-modal-confirm',
+        onConfirm: async function () {
+          await executeSaveItemMaster('update');
+        }
+      });
+    }
   } else {
-    executeSaveItemMaster();
+    executeSaveItemMaster('replace');
   }
 }
 
-async function executeSaveItemMaster() {
+async function executeSaveItemMaster(mode = 'replace') {
   if (!pendingImportData) return;
-  showLoading('Saving Item Master…');
+  showLoading(mode === 'update' ? 'Updating Item Master…' : 'Saving Item Master…');
   try {
     const today = getTodayISO();
+    let finalItems = [];
+    let updatedCount = 0;
+    let addedCount = 0;
+
+    if (mode === 'update' && cachedItemMaster && cachedItemMaster.length > 0) {
+      const mergedList = cachedItemMaster.map(item => ({ ...item }));
+      const existingIds = new Set(mergedList.map(item => String(item.itemId)));
+
+      const nameToIndex = new Map();
+      mergedList.forEach((item, idx) => {
+        if (item.itemName && item.itemName.trim()) {
+          nameToIndex.set(item.itemName.trim().toLowerCase(), idx);
+        }
+      });
+
+      pendingImportData.items.forEach(newItem => {
+        const lowerName = newItem.itemName ? newItem.itemName.trim().toLowerCase() : '';
+        if (lowerName && nameToIndex.has(lowerName)) {
+          const idx = nameToIndex.get(lowerName);
+          const existing = mergedList[idx];
+
+          if (newItem.rate !== undefined && newItem.rate !== null && newItem.rate > 0) {
+            existing.rate = newItem.rate;
+          }
+          if (newItem.availableQuantity !== undefined && newItem.availableQuantity !== null) {
+            existing.availableQuantity = newItem.availableQuantity;
+          }
+          existing.isEmpty = false;
+          updatedCount++;
+        } else {
+          let uniqueId = newItem.itemId;
+          if (existingIds.has(uniqueId)) {
+            uniqueId = 'P' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+          }
+          existingIds.add(uniqueId);
+
+          const itemToAdd = {
+            ...newItem,
+            itemId: uniqueId
+          };
+          mergedList.push(itemToAdd);
+          if (lowerName) {
+            nameToIndex.set(lowerName, mergedList.length - 1);
+          }
+          addedCount++;
+        }
+      });
+
+      finalItems = mergedList;
+    } else {
+      finalItems = pendingImportData.items;
+      addedCount = finalItems.length;
+    }
+
     const meta = {
       lastUpdated: today,
-      itemCount: pendingImportData.items.length,
+      itemCount: finalItems.length,
       filename: pendingImportData.filename
     };
-    await dbSaveItemMaster(pendingImportData.items, meta);
+    await dbSaveItemMaster(finalItems, meta);
     await loadItemMasterCache();
 
     hideImportPreview();
-    showToast('Imported ' + pendingImportData.items.length + ' items successfully!', 'success', 4000);
+    if (mode === 'update') {
+      showToast('Catalog updated: ' + updatedCount + ' updated, ' + addedCount + ' added! (Total: ' + finalItems.length + ' items)', 'success', 5000);
+    } else {
+      showToast('Catalog imported: ' + finalItems.length + ' items saved successfully!', 'success', 4000);
+    }
     pendingImportData = null;
 
     await renderHome();
@@ -1873,56 +2218,995 @@ function escapeAttr(str) {
 }
 
 /* =========================================================
-   20B. DEMO CATALOG & SAMPLE TEMPLATE
+   20B. ITEM EDIT / FILL MODAL & MANUAL ADD
    ========================================================= */
 
-async function loadDemoCatalog() {
-  const sampleItems = [
-    { itemId: 'AASH-10', itemName: 'Aashirvaad Superior MP Atta 10kg', availableQuantity: 100, rate: 420 },
-    { itemId: 'FORT-1L', itemName: 'Fortune Sunlite Refined Sunflower Oil 1L', availableQuantity: 240, rate: 135 },
-    { itemId: 'SUGR-5K', itemName: 'Madhur Pure & Hygienic Sugar 5kg', availableQuantity: 80, rate: 230 },
-    { itemId: 'RICE-5K', itemName: 'Daawat Rozana Super Basmati Rice 5kg', availableQuantity: 60, rate: 390 },
-    { itemId: 'SALT-1K', itemName: 'Tata Salt Vacuum Evaporated 1kg', availableQuantity: 500, rate: 26 },
-    { itemId: 'TEA-GLD', itemName: 'Tata Tea Gold 500g', availableQuantity: 150, rate: 310 },
-    { itemId: 'TEA-RED', itemName: 'Red Label Natural Care Tea 500g', availableQuantity: 120, rate: 295 },
-    { itemId: 'MAGG-24', itemName: 'Maggi 2-Minute Noodles 70g (Pack of 24)', availableQuantity: 75, rate: 312 },
-    { itemId: 'PARL-80', itemName: 'Parle-G Glucose Biscuits 800g', availableQuantity: 200, rate: 72 },
-    { itemId: 'GOOD-DAY', itemName: 'Britannia Good Day Butter Cookies 600g', availableQuantity: 180, rate: 110 },
-    { itemId: 'DAL-TOOR', itemName: 'Toor Dal Desi Polished 1kg', availableQuantity: 150, rate: 165 },
-    { itemId: 'DAL-MOON', itemName: 'Moong Dal Yellow Split 1kg', availableQuantity: 120, rate: 140 },
-    { itemId: 'DAL-CHAN', itemName: 'Chana Dal Premium 1kg', availableQuantity: 140, rate: 98 },
-    { itemId: 'SPIC-HLD', itemName: 'Everest Turmeric Powder 500g', availableQuantity: 90, rate: 145 },
-    { itemId: 'SPIC-CHL', itemName: 'Everest Chilli Powder 500g', availableQuantity: 85, rate: 195 },
-    { itemId: 'DET-SURF', itemName: 'Surf Excel Easy Wash Detergent Powder 1kg', availableQuantity: 110, rate: 140 },
-    { itemId: 'DET-RIN4', itemName: 'Rin Detergent Bar 250g (Pack of 4)', availableQuantity: 160, rate: 76 },
-    { itemId: 'SOAP-DET', itemName: 'Dettol Original Bathing Soap 125g (Pack of 3)', availableQuantity: 95, rate: 155 },
-    { itemId: 'SOAP-LIF', itemName: 'Lifebuoy Total Soap 125g (Pack of 4)', availableQuantity: 130, rate: 125 },
-    { itemId: 'TOOTH-CL', itemName: 'Colgate Strong Teeth Toothpaste 500g', availableQuantity: 140, rate: 215 },
-    { itemId: 'DISH-VIM', itemName: 'Vim Lemon Dishwash Bar 300g', availableQuantity: 250, rate: 30 },
-    { itemId: 'SAUCE-KS', itemName: 'Kissan Fresh Tomato Ketchup 1kg', availableQuantity: 65, rate: 125 },
-    { itemId: 'SNK-BHUJ', itemName: 'Haldiram Bhujia Sev 1kg', availableQuantity: 70, rate: 260 },
-    { itemId: 'BUTR-AML', itemName: 'Amul Butter 500g', availableQuantity: 50, rate: 275 },
-    { itemId: 'SPIC-PEP', itemName: 'Catch Black Pepper Powder 100g', availableQuantity: 80, rate: 95 }
-  ];
+function openEditItemModal(itemId) {
+  const item = cachedItemMaster.find(it => it.itemId === itemId);
+  if (!item) return;
+
+  document.getElementById('item-edit-modal-title').textContent = '✏️ Edit Product Details';
+  document.getElementById('edit-item-orig-id').value = item.itemId;
+  document.getElementById('edit-item-name').value = item.itemName || '';
+  document.getElementById('edit-item-qty').value = item.availableQuantity !== undefined ? item.availableQuantity : 0;
+  document.getElementById('edit-item-rate').value = item.rate !== undefined ? item.rate : 0;
+  document.getElementById('edit-item-code').value = item.itemId || '';
+  document.getElementById('btn-item-edit-delete').style.display = 'block';
+
+  document.getElementById('item-edit-modal-overlay').classList.add('active');
+  try { document.getElementById('edit-item-name').focus(); } catch (e) {}
+}
+
+function openAddNewItemModal() {
+  const nextId = 'P' + String(cachedItemMaster.length + 1).padStart(3, '0');
+  document.getElementById('item-edit-modal-title').textContent = '➕ Add New Product';
+  document.getElementById('edit-item-orig-id').value = '';
+  document.getElementById('edit-item-name').value = '';
+  document.getElementById('edit-item-qty').value = '';
+  document.getElementById('edit-item-rate').value = '';
+  document.getElementById('edit-item-code').value = nextId;
+  document.getElementById('btn-item-edit-delete').style.display = 'none';
+
+  document.getElementById('item-edit-modal-overlay').classList.add('active');
+  try { document.getElementById('edit-item-name').focus(); } catch (e) {}
+}
+
+function closeEditItemModal() {
+  const overlay = document.getElementById('item-edit-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+async function handleSaveEditItem() {
+  const origId  = document.getElementById('edit-item-orig-id').value.trim();
+  const name    = document.getElementById('edit-item-name').value.trim();
+  const rawQty  = document.getElementById('edit-item-qty').value;
+  const rawRate = document.getElementById('edit-item-rate').value;
+  const code    = document.getElementById('edit-item-code').value.trim() || origId || ('P' + String(cachedItemMaster.length + 1).padStart(3, '0'));
+
+  if (!name) {
+    showToast('Please enter product name.', 'warning');
+    return;
+  }
+
+  const qty  = sanitizeNumber(rawQty, 0);
+  const rate = sanitizeNumber(rawRate, 0);
+
+  const updatedItem = {
+    itemId: code,
+    itemName: name,
+    availableQuantity: qty >= 0 ? qty : 0,
+    rate: rate >= 0 ? rate : 0,
+    isEmpty: false
+  };
 
   try {
-    showLoading('Loading demo wholesale catalog...');
-    await dbSaveItemMaster(sampleItems, {
-      filename: 'Sample_FMCG_Catalog.xlsx',
-      importedAt: new Date().toISOString(),
-      itemCount: sampleItems.length,
-      columnsUsed: { nameCol: 'Item Name', qtyCol: 'Quantity', rateCol: 'Rate', codeCol: 'Item Code' }
-    });
+    if (origId && origId !== code) {
+      await dbDeleteItem(origId);
+    }
+    await dbSaveItem(updatedItem);
     await loadItemMasterCache();
+    closeEditItemModal();
+    showToast('Product "' + name + '" saved successfully!', 'success');
     await renderHome();
-    await renderItemMasterList('');
-    hideLoading();
-    showToast('Loaded 25 wholesale products into catalog!', 'success', 4000);
+    if (screens.itemMaster && screens.itemMaster.classList.contains('active')) {
+      const searchInp = document.getElementById('item-master-search-input');
+      await renderItemMasterList(searchInp ? searchInp.value : '');
+    }
   } catch (err) {
-    hideLoading();
-    console.error('Failed to load demo catalog:', err);
-    showToast('Could not load sample catalog.', 'error');
+    console.error('Save item error:', err);
+    showToast('Failed to save product.', 'error');
   }
+}
+
+async function handleDeleteEditItem() {
+  const origId = document.getElementById('edit-item-orig-id').value.trim();
+  if (!origId) return;
+
+  showConfirmModal({
+    icon: '🗑️',
+    title: 'Delete this product?',
+    message: 'Are you sure you want to delete this product from the catalog?',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+    confirmClass: 'btn-danger',
+    onConfirm: async function () {
+      try {
+        await dbDeleteItem(origId);
+        await loadItemMasterCache();
+        closeEditItemModal();
+        showToast('Product deleted.', 'info');
+        await renderHome();
+        if (screens.itemMaster && screens.itemMaster.classList.contains('active')) {
+          const searchInp = document.getElementById('item-master-search-input');
+          await renderItemMasterList(searchInp ? searchInp.value : '');
+        }
+      } catch (err) {
+        console.error('Delete item error:', err);
+        showToast('Failed to delete product.', 'error');
+      }
+    }
+  });
+}
+
+/* =========================================================
+   20C. CUSTOMER MASTER DIRECTORY & EXCEL IMPORT
+   ========================================================= */
+
+async function openCustomerMasterScreen() {
+  const searchInp = document.getElementById('customer-master-search-input');
+  if (searchInp) searchInp.value = '';
+  await renderCustomerMasterList('');
+  showScreen('customerMaster');
+}
+
+async function renderCustomerMasterList(query) {
+  const q = (query || '').toLowerCase().trim();
+  const listEl = document.getElementById('customer-master-list');
+  const countBadge = document.getElementById('customer-count-badge');
+  const updatedBadge = document.getElementById('customer-updated-badge');
+
+  if (countBadge) {
+    countBadge.textContent = cachedCustomerMaster.length + ' Customer' + (cachedCustomerMaster.length !== 1 ? 's' : '');
+  }
+  if (updatedBadge) {
+    if (customerMasterMetadata && customerMasterMetadata.lastUpdated) {
+      updatedBadge.textContent = 'Updated: ' + formatDateForDisplay(customerMasterMetadata.lastUpdated);
+    } else {
+      updatedBadge.textContent = 'Updated: Never';
+    }
+  }
+
+  if (!listEl) return;
+  listEl.innerHTML = '';
+
+  if (cachedCustomerMaster.length === 0) {
+    listEl.innerHTML =
+      '<div class="empty-state">' +
+        '<div class="empty-icon">👥</div>' +
+        '<div class="empty-title">Customer Directory is Empty</div>' +
+        '<div class="empty-sub">Import an Excel (.xlsx) file with customer names and phone numbers, or add customers manually.</div>' +
+        '<div style="margin-top:16px; display:flex; flex-direction:column; gap:10px; width:100%">' +
+          '<button type="button" id="btn-empty-cust-import" class="btn-primary-action btn-customer-action" style="margin-bottom:0">📂 Import Customer Excel (.xlsx)</button>' +
+          '<button type="button" id="btn-empty-cust-add" class="btn-secondary-action" style="margin-bottom:0">+ Add Customer Manually</button>' +
+        '</div>' +
+      '</div>';
+    const bImp = document.getElementById('btn-empty-cust-import');
+    if (bImp) bImp.addEventListener('click', function () {
+      const fi = document.getElementById('customer-master-file-input');
+      if (fi) fi.click();
+    });
+    const bAdd = document.getElementById('btn-empty-cust-add');
+    if (bAdd) bAdd.addEventListener('click', openAddNewCustomerModal);
+    return;
+  }
+
+  const filtered = q
+    ? cachedCustomerMaster.filter(function (c) {
+        return (c.customerName || '').toLowerCase().includes(q) ||
+               (c.phone || '').toLowerCase().includes(q) ||
+               (c.address || '').toLowerCase().includes(q) ||
+               (c.customerId || '').toLowerCase().includes(q);
+      })
+    : cachedCustomerMaster;
+
+  if (filtered.length === 0) {
+    listEl.innerHTML =
+      '<div class="empty-state">' +
+        '<div class="empty-icon">🔍</div>' +
+        '<div class="empty-title">No matching customers</div>' +
+        '<div class="empty-sub">Try searching with a different name or phone number.</div>' +
+      '</div>';
+    return;
+  }
+
+  filtered.forEach(function (cust) {
+    const card = document.createElement('div');
+    card.className = 'customer-item-card';
+    const isIncomplete = !cust.customerName || cust.isEmpty;
+    const nameDisplay = cust.customerName
+      ? escapeHtml(cust.customerName)
+      : '<span class="empty-title-placeholder">(Empty Customer Name — Tap to Fill)</span>';
+
+    card.innerHTML =
+      '<div class="customer-item-top">' +
+        '<div style="display:flex; flex-direction:column; gap:4px; flex:1">' +
+          '<div class="customer-item-name">' + nameDisplay + '</div>' +
+          (isIncomplete ? '<span class="badge-incomplete-tag">⚠️ Empty / Incomplete — Tap Edit</span>' : '') +
+        '</div>' +
+        (cust.customerId ? '<span class="customer-item-code">' + escapeHtml(cust.customerId) + '</span>' : '') +
+      '</div>' +
+      '<div class="customer-item-details">' +
+        (cust.phone ? '<a href="tel:' + escapeAttr(cust.phone) + '" class="customer-phone-pill" onclick="event.stopPropagation()">📞 ' + escapeHtml(cust.phone) + '</a>' : '<span style="font-size:12px;color:var(--text-muted)">No phone</span>') +
+        (cust.address ? '<span class="customer-address-text">📍 ' + escapeHtml(cust.address) + '</span>' : '') +
+      '</div>' +
+      '<div class="customer-item-actions">' +
+        '<button type="button" class="btn-secondary-action btn-create-cust-order" style="margin-bottom:0; padding:4px 10px; font-size:12px" data-cust-id="' + escapeAttr(cust.customerId) + '">📝 New Order</button>' +
+        '<button type="button" class="btn-edit-badge btn-edit-cust" data-cust-id="' + escapeAttr(cust.customerId) + '">✏️ Edit / Fill</button>' +
+      '</div>';
+
+    const editBtn = card.querySelector('.btn-edit-cust');
+    if (editBtn) {
+      editBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openEditCustomerModal(cust.customerId);
+      });
+    }
+
+    const orderBtn = card.querySelector('.btn-create-cust-order');
+    if (orderBtn) {
+      orderBtn.addEventListener('click', async function (e) {
+        e.stopPropagation();
+        await openNewOrderScreen();
+        const nameInput = document.getElementById('new-customer-name');
+        const phoneInput = document.getElementById('new-customer-phone');
+        if (nameInput) nameInput.value = cust.customerName || '';
+        if (phoneInput && cust.phone) phoneInput.value = cust.phone;
+      });
+    }
+
+    card.addEventListener('click', function () {
+      openEditCustomerModal(cust.customerId);
+    });
+
+    listEl.appendChild(card);
+  });
+}
+
+/** Helper to clean phone numbers from Excel cells and ignore boolean / 'Yes' / 'No' flags */
+function extractCleanCustomerPhone(val) {
+  if (val === null || val === undefined) return '';
+  const str = String(val).trim();
+  if (!str) return '';
+  // Ignore "Yes" / "No" / "true" / "false" (which are values in 'Default WhatsApp No.')
+  if (/^(yes|no|true|false)$/i.test(str)) return '';
+  // Remove Excel text apostrophes (e.g. '9876543210 -> 9876543210) and quotes
+  const cleaned = str.replace(/^['"]+/, '').replace(/['"]+$/, '').trim();
+  if (/\d/.test(cleaned)) {
+    return cleaned;
+  }
+  return '';
+}
+
+/** Intelligent Header & Column detection for Customer Master (supports Tally Ledger Contact Details & standard templates) */
+function detectCustomerMasterHeaderAndColumns(rawRows) {
+  let headerRowIndex = -1;
+  const maxScan = Math.min(rawRows.length, 35);
+
+  // Pass 1: Look for exact header keywords in rows
+  for (let r = 0; r < maxScan; r++) {
+    const row = rawRows[r];
+    if (!Array.isArray(row) || row.length === 0) continue;
+
+    const cells = row.map(c => String(c || '').toLowerCase().trim().replace(/[\r\n\t_]+/g, ' ').replace(/\s+/g, ' '));
+    const nonBlankCount = cells.filter(Boolean).length;
+    if (nonBlankCount < 2) continue; // Skip single title lines like "Ledger Contact Details", "For All Ledgers"
+
+    // Check for "particulars" in ANY cell of this row (Tally always puts "Particulars" in the header row)
+    const hasPartic = cells.some(c => c === 'particulars' || c.startsWith('particulars'));
+    const hasCust = cells.some(c =>
+      c === 'customer name' || c === 'shop name' || c === 'party name' ||
+      c === 'store name' || c === 'client name' || c === 'customer / shop name' ||
+      c === 'customer' || c === 'party' || c === 'shop'
+    );
+    const hasPhone = cells.some(c =>
+      c.includes('mobile') || c.includes('phone') || c.includes('whatsapp') ||
+      c === 'contact' || c === 'contact name' || c === 'contact no' || c.includes('tel')
+    );
+
+    if ((hasPartic && hasPhone) || (hasCust && hasPhone) || (hasPartic && nonBlankCount >= 3) || (hasCust && nonBlankCount >= 2)) {
+      headerRowIndex = r;
+      break;
+    }
+  }
+
+  // Pass 2 fallback: check if any row has "particulars" or "customer name" / "shop name"
+  if (headerRowIndex === -1) {
+    for (let r = 0; r < maxScan; r++) {
+      const row = rawRows[r];
+      if (!Array.isArray(row) || row.filter(Boolean).length < 2) continue;
+      const cells = row.map(c => String(c || '').toLowerCase().trim());
+      if (cells.some(c => c === 'particulars' || c.includes('customer name') || c.includes('shop name') || c.includes('party name'))) {
+        headerRowIndex = r;
+        break;
+      }
+    }
+  }
+
+  if (headerRowIndex === -1) headerRowIndex = 0;
+
+  const headerRow = rawRows[headerRowIndex] || [];
+  const norm = headerRow.map(c => String(c || '').toLowerCase().trim().replace(/[\r\n\t_]+/g, ' ').replace(/\s+/g, ' '));
+
+  let nameIdx = -1, mobileIdx = -1, phoneIdx = -1, contactNameIdx = -1, addressIdx = -1, emailIdx = -1, codeIdx = -1;
+
+  for (let i = 0; i < norm.length; i++) {
+    const val = norm[i];
+    if (!val) continue;
+
+    // 1. Customer / Shop Name Column
+    // Match "particulars", "shop name", "customer name", "party name", etc.
+    // Explicitly exclude "contact name" from matching customer name
+    if (nameIdx === -1 && (
+      val === 'particulars' || val.startsWith('particulars') ||
+      val === 'shop name' || val === 'customer name' || val === 'party name' ||
+      val === 'customer / shop name' || val === 'store name' || val === 'client name' ||
+      val === 'ledger' || val === 'ledger name' || val === 'party' || val === 'customer' || val === 'shop' ||
+      (!val.includes('contact') && (val === 'name' || val.includes('party') || val.includes('customer') || val.includes('shop')))
+    )) {
+      nameIdx = i;
+    }
+    // 2. Mobile Nos
+    else if (mobileIdx === -1 && (
+      val.includes('mobile nos') || val.includes('mobile no') || val === 'mobile' ||
+      val.includes('mobile number') || val === 'cell'
+    )) {
+      mobileIdx = i;
+    }
+    // 3. Phone No
+    else if (phoneIdx === -1 && (
+      val.includes('phone no') || val.includes('phone number') || val === 'phone' ||
+      val === 'tel' || val.includes('telephone') || val === 'landline'
+    )) {
+      phoneIdx = i;
+    }
+    // 4. Contact Name / Person
+    else if (contactNameIdx === -1 && (
+      val.includes('contact name') || val.includes('contact person') || val === 'contact'
+    )) {
+      contactNameIdx = i;
+    }
+    // 5. Address
+    else if (addressIdx === -1 && (
+      val.includes('address') || val.includes('city') || val.includes('area') ||
+      val.includes('location') || val.includes('place') || val.includes('town')
+    )) {
+      addressIdx = i;
+    }
+    // 6. Email
+    else if (emailIdx === -1 && (
+      val.includes('email') || val.includes('e-mail') || val === 'mail'
+    )) {
+      emailIdx = i;
+    }
+    // 7. Code
+    else if (codeIdx === -1 && (
+      val.includes('code') || val.includes('cust id') || val === 'id' || val.includes('party code')
+    )) {
+      codeIdx = i;
+    }
+  }
+
+  // Tally layout: Col 0 is "Particulars" (Shop Name)
+  if (nameIdx === -1 && norm[0] && norm[0].includes('partic')) nameIdx = 0;
+  if (nameIdx === -1) {
+    for (let i = 0; i < norm.length; i++) {
+      if (norm[i]) { nameIdx = i; break; }
+    }
+  }
+  if (nameIdx === -1) nameIdx = 0;
+
+  // In Tally: Col 0 = Particulars (Shop), Col 1 = Contact Name, Col 2 = Mobile Nos, Col 3 = Default WhatsApp No (skip), Col 4 = Phone No, Col 5 = E-Mail ID
+  if (nameIdx === 0 && mobileIdx === -1 && norm.length > 2) mobileIdx = 2;
+  if (nameIdx === 0 && phoneIdx === -1 && norm.length > 4) phoneIdx = 4;
+  if (nameIdx === 0 && contactNameIdx === -1 && norm.length > 1) contactNameIdx = 1;
+  if (nameIdx === 0 && emailIdx === -1 && norm.length > 5) emailIdx = 5;
+
+  return { headerRowIndex, cols: { nameIdx, mobileIdx, phoneIdx, contactNameIdx, addressIdx, emailIdx, codeIdx } };
+}
+
+/** File input change handler for Customer Master */
+function handleCustomerExcelFileSelect(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  if (typeof XLSX === 'undefined') {
+    showToast('Excel library not loaded. Check connection.', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function (evt) {
+    try {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        showToast('Excel file has no sheets.', 'error');
+        return;
+      }
+
+      // Prioritize Ledger Contact Details or customers sheet if present
+      let targetSheetName = workbook.SheetNames[0];
+      const preferredSheets = ['ledger contact details', 'ledger contacts', 'ledgers', 'ledger', 'customers', 'contacts', 'customer master'];
+      for (let s = 0; s < workbook.SheetNames.length; s++) {
+        const sName = workbook.SheetNames[s].trim().toLowerCase();
+        if (preferredSheets.includes(sName)) {
+          targetSheetName = workbook.SheetNames[s];
+          break;
+        }
+      }
+
+      const sheet = workbook.Sheets[targetSheetName];
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      processExcelCustomerRows(file.name, rawRows);
+    } catch (err) {
+      console.error('Customer excel parse error:', err);
+      showToast('Failed to read Excel file. Please ensure it is a valid .xlsx file.', 'error');
+    }
+  };
+  reader.onerror = function () {
+    showToast('Could not read selected file.', 'error');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/** Process raw rows from Customer Excel — Tolerant of empty rows & allows filling later */
+function processExcelCustomerRows(filename, rawRows) {
+  if (!rawRows || rawRows.length < 2) {
+    showToast('Excel file does not contain enough data rows.', 'warning');
+    return;
+  }
+
+  const detected = detectCustomerMasterHeaderAndColumns(rawRows);
+  const headerRowIndex = detected.headerRowIndex;
+  const cols = detected.cols;
+
+  if (headerRowIndex === -1 || !cols || cols.nameIdx === -1) {
+    showConfirmModal({
+      icon: '✕',
+      title: 'Unable to identify customer columns.',
+      message: 'Please ensure your Excel contains columns like:\nParticulars / Customer Name\nMobile Nos. / Phone\nAddress',
+      confirmText: 'OK',
+      cancelText: 'Close'
+    });
+    return;
+  }
+
+  // Find last row with content (to avoid infinite blank trailing rows)
+  let lastContentIndex = headerRowIndex;
+  for (let r = headerRowIndex + 1; r < rawRows.length; r++) {
+    const row = rawRows[r];
+    if (Array.isArray(row) && row.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== '')) {
+      lastContentIndex = r;
+    }
+  }
+
+  const validCustomers = [];
+  const seenNames = new Map();
+  const duplicateNames = [];
+
+  // Import up to last row with content (retains internal empty rows for filling later)
+  const maxRow = Math.min(rawRows.length, Math.max(lastContentIndex + 1, headerRowIndex + 1));
+  for (let r = headerRowIndex + 1; r < maxRow; r++) {
+    const row = rawRows[r] || [];
+
+    const rawName = cols.nameIdx !== -1 && row[cols.nameIdx] !== undefined ? String(row[cols.nameIdx]).trim() : '';
+
+    // Skip summary / grand total rows commonly generated by Tally
+    const lowerName = rawName.toLowerCase();
+    if (lowerName === 'total' || lowerName === 'grand total' || lowerName.startsWith('total ')) {
+      continue;
+    }
+
+    // Phone: prioritize mobile numbers, fallback to phone / landline
+    let phone = '';
+    if (cols.mobileIdx !== -1 && row[cols.mobileIdx] !== undefined) {
+      phone = extractCleanCustomerPhone(row[cols.mobileIdx]);
+    }
+    if (!phone && cols.phoneIdx !== -1 && row[cols.phoneIdx] !== undefined) {
+      phone = extractCleanCustomerPhone(row[cols.phoneIdx]);
+    }
+
+    // Address & Contact Person
+    let address = '';
+    if (cols.addressIdx !== -1 && row[cols.addressIdx] !== undefined) {
+      address = String(row[cols.addressIdx]).trim();
+    }
+    if (!address && cols.contactNameIdx !== -1 && row[cols.contactNameIdx] !== undefined) {
+      const cPerson = String(row[cols.contactNameIdx]).trim();
+      if (cPerson) address = 'Contact: ' + cPerson;
+    }
+    if (cols.emailIdx !== -1 && row[cols.emailIdx] !== undefined) {
+      const email = String(row[cols.emailIdx]).trim();
+      if (email && email.includes('@')) {
+        address = address ? (address + ' | ' + email) : email;
+      }
+    }
+
+    const code = cols.codeIdx !== -1 && row[cols.codeIdx] !== undefined && String(row[cols.codeIdx]).trim() !== ''
+      ? String(row[cols.codeIdx]).trim()
+      : ('CUST-' + String(validCustomers.length + 1).padStart(3, '0'));
+
+    if (rawName) {
+      if (seenNames.has(lowerName)) {
+        if (!duplicateNames.includes(rawName)) duplicateNames.push(rawName);
+      } else {
+        seenNames.set(lowerName, true);
+      }
+    }
+
+    validCustomers.push({
+      customerId: code,
+      customerName: rawName,
+      phone: phone,
+      address: address,
+      isEmpty: !rawName
+    });
+  }
+
+  if (duplicateNames.length > 0) {
+    showToast(duplicateNames.length + ' duplicate customer name(s) detected in file.', 'warning', 4000);
+  }
+
+  if (validCustomers.length === 0) {
+    showToast('No customers found in sheet.', 'warning');
+    return;
+  }
+
+  pendingCustomerImportData = {
+    filename: filename,
+    customers: validCustomers
+  };
+
+  showCustomerImportPreview(filename, validCustomers);
+}
+
+function showCustomerImportPreview(filename, customers) {
+  document.getElementById('preview-customer-file-name').textContent = filename;
+  const emptyCount = customers.filter(c => c.isEmpty).length;
+  let pillText = '✓ ' + customers.length + ' customer' + (customers.length !== 1 ? 's' : '') + ' detected';
+  if (emptyCount > 0) {
+    pillText += ' (' + emptyCount + ' empty - can fill later)';
+  }
+  document.getElementById('preview-customer-count-pill').textContent = pillText;
+
+  const modeBox = document.getElementById('customer-import-mode-box');
+  const btnConfirm = document.getElementById('btn-preview-customer-confirm');
+
+  if (cachedCustomerMaster && cachedCustomerMaster.length > 0) {
+    if (modeBox) modeBox.style.display = 'block';
+    setCustomerImportMode('update');
+  } else {
+    if (modeBox) modeBox.style.display = 'none';
+    if (btnConfirm) {
+      btnConfirm.textContent = 'Import ' + customers.length + ' Customers';
+      btnConfirm.classList.remove('btn-danger-mode');
+    }
+  }
+
+  const tbody = document.getElementById('preview-customer-table-body');
+  tbody.innerHTML = '';
+
+  const previewCount = Math.min(customers.length, 50);
+  for (let i = 0; i < previewCount; i++) {
+    const cust = customers[i];
+    const tr = document.createElement('tr');
+    const nameDisplay = cust.customerName
+      ? '<strong>' + escapeHtml(cust.customerName) + '</strong>'
+      : '<em style="color:#B25E00; font-weight:600">Empty Row (Fill Later)</em>';
+
+    tr.innerHTML =
+      '<td>' + nameDisplay + '</td>' +
+      '<td>' + (cust.phone ? escapeHtml(cust.phone) : '—') + '</td>' +
+      '<td>' + (cust.address ? escapeHtml(cust.address) : '—') + '</td>';
+    tbody.appendChild(tr);
+  }
+
+  if (customers.length > 50) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td colspan="3" style="text-align:center; color:var(--text-muted); padding:8px">' +
+        '… and ' + (customers.length - 50) + ' more customers' +
+      '</td>';
+    tbody.appendChild(tr);
+  }
+
+  document.getElementById('preview-customer-modal-overlay').classList.add('active');
+}
+
+function setCustomerImportMode(mode) {
+  const lblUpdate = document.getElementById('lbl-customer-mode-update');
+  const lblReplace = document.getElementById('lbl-customer-mode-replace');
+  const radioUpdate = document.querySelector('input[name="customer-import-mode"][value="update"]');
+  const radioReplace = document.querySelector('input[name="customer-import-mode"][value="replace"]');
+  const btnConfirm = document.getElementById('btn-preview-customer-confirm');
+  const count = pendingCustomerImportData ? pendingCustomerImportData.customers.length : 0;
+
+  if (mode === 'replace') {
+    if (radioReplace) radioReplace.checked = true;
+    if (lblReplace) lblReplace.classList.add('selected', 'mode-replace');
+    if (lblUpdate) lblUpdate.classList.remove('selected');
+    if (btnConfirm) {
+      btnConfirm.textContent = '⚠️ Replace Directory (' + count + ' Customers)';
+      btnConfirm.classList.add('btn-danger-mode');
+    }
+  } else {
+    if (radioUpdate) radioUpdate.checked = true;
+    if (lblUpdate) lblUpdate.classList.add('selected');
+    if (lblReplace) lblReplace.classList.remove('selected', 'mode-replace');
+    if (btnConfirm) {
+      btnConfirm.textContent = '🔄 Update & Merge (' + count + ' Customers)';
+      btnConfirm.classList.remove('btn-danger-mode');
+    }
+  }
+}
+
+function hideCustomerImportPreview() {
+  const overlay = document.getElementById('preview-customer-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+function handleCustomerImportConfirm() {
+  if (!pendingCustomerImportData) return;
+
+  const modeRadio = document.querySelector('input[name="customer-import-mode"]:checked');
+  const mode = (cachedCustomerMaster && cachedCustomerMaster.length > 0 && modeRadio) ? modeRadio.value : 'replace';
+
+  if (cachedCustomerMaster && cachedCustomerMaster.length > 0) {
+    if (mode === 'replace') {
+      showConfirmModal({
+        icon: '⚠️',
+        title: 'Replace entire customer directory?',
+        message: 'The current ' + cachedCustomerMaster.length + ' customers will be overwritten by this Excel file.',
+        confirmText: 'Replace All',
+        cancelText: 'Cancel',
+        confirmClass: 'btn-modal-confirm',
+        onConfirm: async function () {
+          await executeSaveCustomerMaster('replace');
+        }
+      });
+    } else {
+      showConfirmModal({
+        icon: '🔄',
+        title: 'Update & Merge directory?',
+        message: 'Matching customer phone & address will be updated, and new customers will be added. Your existing ' + cachedCustomerMaster.length + ' customers will be preserved.',
+        confirmText: 'Update & Merge',
+        cancelText: 'Cancel',
+        confirmClass: 'btn-modal-confirm',
+        onConfirm: async function () {
+          await executeSaveCustomerMaster('update');
+        }
+      });
+    }
+  } else {
+    executeSaveCustomerMaster('replace');
+  }
+}
+
+async function executeSaveCustomerMaster(mode = 'replace') {
+  if (!pendingCustomerImportData) return;
+  showLoading(mode === 'update' ? 'Updating Customer Directory…' : 'Saving Customer Directory…');
+  try {
+    const today = getTodayISO();
+    let finalCustomers = [];
+    let updatedCount = 0;
+    let addedCount = 0;
+
+    if (mode === 'update' && cachedCustomerMaster && cachedCustomerMaster.length > 0) {
+      const mergedList = cachedCustomerMaster.map(c => ({ ...c }));
+      const existingIds = new Set(mergedList.map(c => String(c.customerId)));
+
+      const nameToIndex = new Map();
+      mergedList.forEach((c, idx) => {
+        if (c.customerName && c.customerName.trim()) {
+          nameToIndex.set(c.customerName.trim().toLowerCase(), idx);
+        }
+      });
+
+      pendingCustomerImportData.customers.forEach(newCust => {
+        const lowerName = newCust.customerName ? newCust.customerName.trim().toLowerCase() : '';
+        if (lowerName && nameToIndex.has(lowerName)) {
+          const idx = nameToIndex.get(lowerName);
+          const existing = mergedList[idx];
+
+          if (newCust.phone && newCust.phone.trim()) {
+            existing.phone = newCust.phone.trim();
+          }
+          if (newCust.address && newCust.address.trim()) {
+            existing.address = newCust.address.trim();
+          }
+          existing.isEmpty = false;
+          updatedCount++;
+        } else {
+          let uniqueId = newCust.customerId;
+          if (existingIds.has(uniqueId)) {
+            uniqueId = 'CUST-' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+          }
+          existingIds.add(uniqueId);
+
+          const custToAdd = {
+            ...newCust,
+            customerId: uniqueId
+          };
+          mergedList.push(custToAdd);
+          if (lowerName) {
+            nameToIndex.set(lowerName, mergedList.length - 1);
+          }
+          addedCount++;
+        }
+      });
+
+      finalCustomers = mergedList;
+    } else {
+      finalCustomers = pendingCustomerImportData.customers;
+      addedCount = finalCustomers.length;
+    }
+
+    const meta = {
+      lastUpdated: today,
+      customerCount: finalCustomers.length,
+      filename: pendingCustomerImportData.filename
+    };
+    await dbSaveCustomerMaster(finalCustomers, meta);
+    await loadCustomerMasterCache();
+
+    hideCustomerImportPreview();
+    if (mode === 'update') {
+      showToast('Directory updated: ' + updatedCount + ' updated, ' + addedCount + ' added! (Total: ' + finalCustomers.length + ' customers)', 'success', 5000);
+    } else {
+      showToast('Imported ' + finalCustomers.length + ' customers successfully!', 'success', 4000);
+    }
+    pendingCustomerImportData = null;
+
+    await renderHome();
+    if (screens.customerMaster && screens.customerMaster.classList.contains('active')) {
+      await renderCustomerMasterList('');
+    }
+  } catch (err) {
+    console.error('Customer import save error:', err);
+    showToast('Failed to save imported customer directory.', 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function downloadCustomerTemplate() {
+  if (typeof XLSX === 'undefined') {
+    showToast('Excel library not loaded.', 'error');
+    return;
+  }
+  const headers = ['Customer Code', 'Customer / Shop Name', 'Phone', 'Address'];
+  const sampleData = [
+    headers,
+    ['CUST-001', 'Sri Balaji Grocery Stores', '9876543210', 'Main Bazaar, Shop #14'],
+    ['CUST-002', 'Laxmi Supermarket', '9822334455', 'MG Road, Hubli'],
+    ['CUST-003', 'Maruti Traders', '9448123456', 'Market Yard, Dharwad'],
+    ['CUST-004', 'Ganesh Provision Store', '9880112233', 'Station Road'],
+    ['CUST-005', '', '', ''] // Sample empty row to show fill later capability
+  ];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(sampleData);
+  XLSX.utils.book_append_sheet(wb, ws, 'Customers');
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const filename = 'Customers_Template.xlsx';
+  const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+  const blob = new Blob([wbout], { type: mimeType });
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () {
+    URL.revokeObjectURL(blobUrl);
+    if (a.parentNode) document.body.removeChild(a);
+  }, 2000);
+  showToast('Downloaded Customers_Template.xlsx', 'success');
+}
+
+function confirmClearCustomerMaster() {
+  if (cachedCustomerMaster.length === 0) {
+    showToast('Customer directory is already empty.', 'info');
+    return;
+  }
+  showConfirmModal({
+    icon: '⚠️',
+    title: 'Clear Customer Directory?',
+    message: 'This will delete all locally stored customers. Customer orders will NOT be affected.',
+    confirmText: 'Clear Directory',
+    cancelText: 'Cancel',
+    confirmClass: 'btn-modal-confirm',
+    onConfirm: async function () {
+      try {
+        await dbClearCustomerMaster();
+        await loadCustomerMasterCache();
+        showToast('Customer directory cleared.', 'success');
+        await renderHome();
+        await renderCustomerMasterList('');
+      } catch (err) {
+        console.error('Clear customers error:', err);
+        showToast('Failed to clear customer directory.', 'error');
+      }
+    }
+  });
+}
+
+/* ── CUSTOMER EDIT / FILL MODAL ── */
+function openEditCustomerModal(customerId) {
+  const cust = cachedCustomerMaster.find(c => c.customerId === customerId);
+  if (!cust) return;
+
+  document.getElementById('customer-edit-modal-title').textContent = '✏️ Edit Customer Details';
+  document.getElementById('edit-customer-orig-id').value = cust.customerId;
+  document.getElementById('edit-customer-name').value = cust.customerName || '';
+  document.getElementById('edit-customer-phone').value = cust.phone || '';
+  document.getElementById('edit-customer-address').value = cust.address || '';
+  document.getElementById('edit-customer-code').value = cust.customerId || '';
+  document.getElementById('btn-customer-edit-delete').style.display = 'block';
+
+  document.getElementById('customer-edit-modal-overlay').classList.add('active');
+  try { document.getElementById('edit-customer-name').focus(); } catch (e) {}
+}
+
+function openAddNewCustomerModal() {
+  const nextId = 'CUST-' + String(cachedCustomerMaster.length + 1).padStart(3, '0');
+  document.getElementById('customer-edit-modal-title').textContent = '➕ Add New Customer';
+  document.getElementById('edit-customer-orig-id').value = '';
+  document.getElementById('edit-customer-name').value = '';
+  document.getElementById('edit-customer-phone').value = '';
+  document.getElementById('edit-customer-address').value = '';
+  document.getElementById('edit-customer-code').value = nextId;
+  document.getElementById('btn-customer-edit-delete').style.display = 'none';
+
+  document.getElementById('customer-edit-modal-overlay').classList.add('active');
+  try { document.getElementById('edit-customer-name').focus(); } catch (e) {}
+}
+
+function closeEditCustomerModal() {
+  const overlay = document.getElementById('customer-edit-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+}
+
+async function handleSaveEditCustomer() {
+  const origId  = document.getElementById('edit-customer-orig-id').value.trim();
+  const name    = document.getElementById('edit-customer-name').value.trim();
+  const phone   = document.getElementById('edit-customer-phone').value.trim();
+  const address = document.getElementById('edit-customer-address').value.trim();
+  const code    = document.getElementById('edit-customer-code').value.trim() || origId || ('CUST-' + String(cachedCustomerMaster.length + 1).padStart(3, '0'));
+
+  if (!name) {
+    showToast('Please enter customer / shop name.', 'warning');
+    return;
+  }
+
+  const updatedCust = {
+    customerId: code,
+    customerName: name,
+    phone: phone,
+    address: address,
+    isEmpty: false
+  };
+
+  try {
+    if (origId && origId !== code) {
+      await dbDeleteCustomer(origId);
+    }
+    await dbSaveCustomer(updatedCust);
+    await loadCustomerMasterCache();
+    closeEditCustomerModal();
+    showToast('Customer "' + name + '" saved successfully!', 'success');
+    await renderHome();
+    if (screens.customerMaster && screens.customerMaster.classList.contains('active')) {
+      const searchInp = document.getElementById('customer-master-search-input');
+      await renderCustomerMasterList(searchInp ? searchInp.value : '');
+    }
+  } catch (err) {
+    console.error('Save customer error:', err);
+    showToast('Failed to save customer.', 'error');
+  }
+}
+
+async function handleDeleteEditCustomer() {
+  const origId = document.getElementById('edit-customer-orig-id').value.trim();
+  if (!origId) return;
+
+  showConfirmModal({
+    icon: '🗑️',
+    title: 'Delete this customer?',
+    message: 'Are you sure you want to delete this customer from the directory?',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+    confirmClass: 'btn-danger',
+    onConfirm: async function () {
+      try {
+        await dbDeleteCustomer(origId);
+        await loadCustomerMasterCache();
+        closeEditCustomerModal();
+        showToast('Customer deleted.', 'info');
+        await renderHome();
+        if (screens.customerMaster && screens.customerMaster.classList.contains('active')) {
+          const searchInp = document.getElementById('customer-master-search-input');
+          await renderCustomerMasterList(searchInp ? searchInp.value : '');
+        }
+      } catch (err) {
+        console.error('Delete customer error:', err);
+        showToast('Failed to delete customer.', 'error');
+      }
+    }
+  });
+}
+
+/* =========================================================
+   20D. CUSTOMER AUTOCOMPLETE ON ORDER FORM
+   ========================================================= */
+
+function setupCustomerAutocomplete() {
+  const nameInput  = document.getElementById('new-customer-name');
+  const phoneInput = document.getElementById('new-customer-phone');
+  const dropdown   = document.getElementById('customer-autocomplete-dropdown');
+  const countBadge = document.getElementById('customer-ac-count');
+  const listEl     = document.getElementById('customer-autocomplete-list');
+
+  if (!nameInput || !dropdown || !listEl) return;
+
+  function renderCustomerDropdown(query) {
+    query = (query || '').trim().toLowerCase();
+    if (query.length < 1 || cachedCustomerMaster.length === 0) {
+      dropdown.style.display = 'none';
+      return;
+    }
+
+    const matches = cachedCustomerMaster.filter(function (c) {
+      const name = (c.customerName || '').toLowerCase();
+      const phone = (c.phone || '').toLowerCase();
+      const code = (c.customerId || '').toLowerCase();
+      return name.includes(query) || phone.includes(query) || code.includes(query);
+    });
+
+    if (matches.length === 0) {
+      dropdown.style.display = 'none';
+      return;
+    }
+
+    if (countBadge) countBadge.textContent = matches.length;
+    listEl.innerHTML = '';
+
+    const maxItems = Math.min(matches.length, 8);
+    for (let i = 0; i < maxItems; i++) {
+      const c = matches[i];
+      const itemEl = document.createElement('div');
+      itemEl.className = 'customer-ac-item';
+      itemEl.innerHTML =
+        '<div class="customer-ac-name">' + (c.customerName ? highlightMatch(c.customerName, query) : '<span class="empty-title-placeholder">(Empty Name - ' + c.customerId + ')</span>') + '</div>' +
+        '<div class="customer-ac-sub">' +
+          (c.phone ? '<span>📞 ' + escapeHtml(c.phone) + '</span>' : '') +
+          (c.address ? '<span>📍 ' + escapeHtml(c.address) + '</span>' : '') +
+        '</div>';
+
+      itemEl.addEventListener('mousedown', function (e) {
+        e.preventDefault(); // prevent input blur before click registers
+      });
+
+      itemEl.addEventListener('click', function () {
+        nameInput.value = c.customerName || '';
+        if (phoneInput && c.phone) {
+          phoneInput.value = c.phone;
+        }
+        dropdown.style.display = 'none';
+      });
+
+      listEl.appendChild(itemEl);
+    }
+
+    dropdown.style.display = 'block';
+  }
+
+  nameInput.addEventListener('input', function (e) {
+    renderCustomerDropdown(e.target.value);
+  });
+
+  nameInput.addEventListener('focus', function (e) {
+    if (e.target.value.trim().length > 0) {
+      renderCustomerDropdown(e.target.value);
+    }
+  });
+
+  nameInput.addEventListener('blur', function () {
+    setTimeout(function () {
+      dropdown.style.display = 'none';
+    }, 200);
+  });
 }
 
 function downloadSampleTemplate() {
@@ -1975,11 +3259,133 @@ function downloadSampleTemplate() {
   showToast('Downloaded Shop_Items_Template.xlsx', 'success');
 }
 
+/** Helper to handle jump to bottom / top of long lists.
+ *  Scrolls ALL possible scroll containers simultaneously so it works
+ *  regardless of whether CSS makes window or .scroll-content the scroller.
+ */
+function setupScrollJump(btnIds, bottomAnchorId, topAnchorId, containerSelector) {
+  const ids = Array.isArray(btnIds) ? btnIds : [btnIds];
+  const container = document.querySelector(containerSelector);
+
+  function getWinScrollTop() {
+    return window.scrollY || window.pageYOffset ||
+      (document.documentElement && document.documentElement.scrollTop) ||
+      (document.body && document.body.scrollTop) || 0;
+  }
+
+  function isAtBottom() {
+    // Check window
+    const winScroll = getWinScrollTop();
+    const winHeight = window.innerHeight || 800;
+    const docHeight = Math.max(
+      document.body ? document.body.scrollHeight : 0,
+      document.documentElement ? document.documentElement.scrollHeight : 0
+    );
+    if ((winScroll + winHeight) >= (docHeight - 200)) return true;
+
+    // Check container
+    if (container && container.scrollHeight > container.clientHeight + 10) {
+      const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (remaining < 200) return true;
+    }
+    return false;
+  }
+
+  function updateButtons() {
+    const atBottom = isAtBottom();
+    ids.forEach(function (id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const text = el.querySelector('.scroll-btn-text') || el;
+      text.textContent = atBottom ? '⬆ Top' : 'Bottom ⬇';
+      el.title = atBottom ? 'Jump to top of page' : 'Jump to bottom of list';
+    });
+  }
+
+  function doScroll() {
+    if (isAtBottom()) {
+      // ── Jump to Top ──
+      // 1. scrollIntoView on anchor (works for both window & container scroll)
+      const topTarget = document.getElementById(topAnchorId);
+      if (topTarget && typeof topTarget.scrollIntoView === 'function') {
+        topTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      // 2. Scroll all candidates to 0
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+      try { if (document.documentElement) document.documentElement.scrollTop = 0; } catch (e) {}
+      try { if (document.body) document.body.scrollTop = 0; } catch (e) {}
+      try { if (container) container.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { if (container) container.scrollTop = 0; }
+    } else {
+      // ── Jump to Bottom ──
+      // 1. scrollIntoView on anchor
+      const bottomTarget = document.getElementById(bottomAnchorId);
+      if (bottomTarget && typeof bottomTarget.scrollIntoView === 'function') {
+        bottomTarget.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+      // 2. Scroll all candidates to max
+      const bigNum = 999999;
+      try { window.scrollTo({ top: bigNum, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, bigNum); }
+      try { if (document.documentElement) document.documentElement.scrollTop = bigNum; } catch (e) {}
+      try { if (document.body) document.body.scrollTop = bigNum; } catch (e) {}
+      try { if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' }); } catch (e) { if (container) container.scrollTop = container.scrollHeight; }
+    }
+    setTimeout(updateButtons, 400);
+    setTimeout(updateButtons, 900);
+  }
+
+  ids.forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        doScroll();
+      });
+    }
+  });
+
+  window.addEventListener('scroll', updateButtons, { passive: true });
+  document.addEventListener('scroll', updateButtons, { passive: true });
+  if (container) {
+    container.addEventListener('scroll', updateButtons, { passive: true });
+  }
+  // Initial state
+  setTimeout(updateButtons, 500);
+}
+
 /* =========================================================
    21. WIRE ALL UI EVENTS
    ========================================================= */
 
 function wireEvents() {
+  /* ── SIDEBAR & HAMBURGER ── */
+  const btnHamburger = document.getElementById('btn-hamburger');
+  if (btnHamburger) btnHamburger.addEventListener('click', openSidebar);
+
+  const btnSidebarClose = document.getElementById('btn-sidebar-close');
+  if (btnSidebarClose) btnSidebarClose.addEventListener('click', closeSidebar);
+
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+  if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar);
+
+  const sbLinkHome = document.getElementById('sidebar-link-home');
+  if (sbLinkHome) sbLinkHome.addEventListener('click', async function () { closeSidebar(); await renderHome(); });
+
+  const sbLinkNew = document.getElementById('sidebar-link-new');
+  if (sbLinkNew) sbLinkNew.addEventListener('click', async function () { closeSidebar(); await openNewOrderScreen(); });
+
+  const sbLinkOrders = document.getElementById('sidebar-link-orders');
+  if (sbLinkOrders) sbLinkOrders.addEventListener('click', function () { closeSidebar(); openSavedOrdersScreen(); });
+
+  const sbLinkItems = document.getElementById('sidebar-link-items');
+  if (sbLinkItems) sbLinkItems.addEventListener('click', function () { closeSidebar(); openItemMasterScreen(); });
+
+  const sbLinkCustomers = document.getElementById('sidebar-link-customers');
+  if (sbLinkCustomers) sbLinkCustomers.addEventListener('click', function () { closeSidebar(); openCustomerMasterScreen(); });
+
+  const sbLinkExport = document.getElementById('sidebar-link-export');
+  if (sbLinkExport) sbLinkExport.addEventListener('click', function () { closeSidebar(); openExportScreen(); });
+
   /* ── HOME ── */
   document.getElementById('btn-new-order')    .addEventListener('click', openNewOrderScreen);
   document.getElementById('btn-saved-orders') .addEventListener('click', openSavedOrdersScreen);
@@ -1998,9 +3404,10 @@ function wireEvents() {
   if (btnHomeView) {
     btnHomeView.addEventListener('click', openItemMasterScreen);
   }
-  const btnHomeDemo = document.getElementById('btn-home-demo-master');
-  if (btnHomeDemo) {
-    btnHomeDemo.addEventListener('click', loadDemoCatalog);
+
+  const btnCatalogAddItem = document.getElementById('btn-catalog-add-item');
+  if (btnCatalogAddItem) {
+    btnCatalogAddItem.addEventListener('click', openAddNewItemModal);
   }
 
   const btnBackFromMaster = document.getElementById('btn-back-from-item-master');
@@ -2015,10 +3422,6 @@ function wireEvents() {
   if (btnCatalogReimport && fileInput) {
     btnCatalogReimport.addEventListener('click', function () { fileInput.click(); });
   }
-  const btnCatalogDemo = document.getElementById('btn-catalog-demo');
-  if (btnCatalogDemo) {
-    btnCatalogDemo.addEventListener('click', loadDemoCatalog);
-  }
   const btnCatalogTemplate = document.getElementById('btn-catalog-template');
   if (btnCatalogTemplate) {
     btnCatalogTemplate.addEventListener('click', downloadSampleTemplate);
@@ -2028,7 +3431,118 @@ function wireEvents() {
     btnClearMaster.addEventListener('click', confirmClearItemMaster);
   }
 
-  /* ── IMPORT PREVIEW MODAL ── */
+  /* Item Master Top Action Bar */
+  const btnCatTopImport = document.getElementById('btn-catalog-top-import');
+  if (btnCatTopImport && fileInput) {
+    btnCatTopImport.addEventListener('click', function () { fileInput.click(); });
+  }
+  const btnCatTopAdd = document.getElementById('btn-catalog-top-add');
+  if (btnCatTopAdd) {
+    btnCatTopAdd.addEventListener('click', openAddNewItemModal);
+  }
+  const btnCatTopClear = document.getElementById('btn-catalog-top-clear');
+  if (btnCatTopClear) {
+    btnCatTopClear.addEventListener('click', confirmClearItemMaster);
+  }
+  setupScrollJump(
+    ['btn-catalog-scroll-bottom', 'fab-catalog-jump'],
+    'catalog-bottom-anchor',
+    'catalog-top-anchor',
+    '#screen-item-master .scroll-content'
+  );
+
+  /* ── CUSTOMER MASTER (HOME & DIRECTORY) ── */
+  const custFileInput = document.getElementById('customer-master-file-input');
+  if (custFileInput) {
+    custFileInput.addEventListener('change', handleCustomerExcelFileSelect);
+  }
+  const btnHomeImportCust = document.getElementById('btn-home-import-customers');
+  if (btnHomeImportCust && custFileInput) {
+    btnHomeImportCust.addEventListener('click', function () { custFileInput.click(); });
+  }
+  const btnHomeViewCust = document.getElementById('btn-home-view-customers');
+  if (btnHomeViewCust) {
+    btnHomeViewCust.addEventListener('click', openCustomerMasterScreen);
+  }
+
+  const btnBackFromCustMaster = document.getElementById('btn-back-from-customer-master');
+  if (btnBackFromCustMaster) {
+    btnBackFromCustMaster.addEventListener('click', async function () { await renderHome(); });
+  }
+  const searchCustInput = document.getElementById('customer-master-search-input');
+  if (searchCustInput) {
+    searchCustInput.addEventListener('input', function (e) { renderCustomerMasterList(e.target.value); });
+  }
+  const btnCustomerAdd = document.getElementById('btn-customer-add');
+  if (btnCustomerAdd) {
+    btnCustomerAdd.addEventListener('click', openAddNewCustomerModal);
+  }
+  const btnCustomerReimport = document.getElementById('btn-customer-reimport');
+  if (btnCustomerReimport && custFileInput) {
+    btnCustomerReimport.addEventListener('click', function () { custFileInput.click(); });
+  }
+  const btnCustomerTemplate = document.getElementById('btn-customer-template');
+  if (btnCustomerTemplate) {
+    btnCustomerTemplate.addEventListener('click', downloadCustomerTemplate);
+  }
+  const btnClearCustMaster = document.getElementById('btn-clear-customer-master');
+  if (btnClearCustMaster) {
+    btnClearCustMaster.addEventListener('click', confirmClearCustomerMaster);
+  }
+
+  /* Customer Master Top Action Bar */
+  const btnCustTopImport = document.getElementById('btn-customer-top-import');
+  if (btnCustTopImport && custFileInput) {
+    btnCustTopImport.addEventListener('click', function () { custFileInput.click(); });
+  }
+  const btnCustTopAdd = document.getElementById('btn-customer-top-add');
+  if (btnCustTopAdd) {
+    btnCustTopAdd.addEventListener('click', openAddNewCustomerModal);
+  }
+  const btnCustTopClear = document.getElementById('btn-customer-top-clear');
+  if (btnCustTopClear) {
+    btnCustTopClear.addEventListener('click', confirmClearCustomerMaster);
+  }
+  setupScrollJump(
+    ['btn-customer-scroll-bottom', 'fab-customer-jump'],
+    'customer-bottom-anchor',
+    'customer-top-anchor',
+    '#screen-customer-master .scroll-content'
+  );
+
+  /* ── ITEM EDIT MODAL ── */
+  const btnItemEditClose = document.getElementById('btn-item-edit-close');
+  if (btnItemEditClose) btnItemEditClose.addEventListener('click', closeEditItemModal);
+  const btnItemEditCancel = document.getElementById('btn-item-edit-cancel');
+  if (btnItemEditCancel) btnItemEditCancel.addEventListener('click', closeEditItemModal);
+  const btnItemEditSave = document.getElementById('btn-item-edit-save');
+  if (btnItemEditSave) btnItemEditSave.addEventListener('click', handleSaveEditItem);
+  const btnItemEditDelete = document.getElementById('btn-item-edit-delete');
+  if (btnItemEditDelete) btnItemEditDelete.addEventListener('click', handleDeleteEditItem);
+  const itemEditOverlay = document.getElementById('item-edit-modal-overlay');
+  if (itemEditOverlay) {
+    itemEditOverlay.addEventListener('click', function (e) {
+      if (e.target === itemEditOverlay) closeEditItemModal();
+    });
+  }
+
+  /* ── CUSTOMER EDIT MODAL ── */
+  const btnCustEditClose = document.getElementById('btn-customer-edit-close');
+  if (btnCustEditClose) btnCustEditClose.addEventListener('click', closeEditCustomerModal);
+  const btnCustEditCancel = document.getElementById('btn-customer-edit-cancel');
+  if (btnCustEditCancel) btnCustEditCancel.addEventListener('click', closeEditCustomerModal);
+  const btnCustEditSave = document.getElementById('btn-customer-edit-save');
+  if (btnCustEditSave) btnCustEditSave.addEventListener('click', handleSaveEditCustomer);
+  const btnCustEditDelete = document.getElementById('btn-customer-edit-delete');
+  if (btnCustEditDelete) btnCustEditDelete.addEventListener('click', handleDeleteEditCustomer);
+  const custEditOverlay = document.getElementById('customer-edit-modal-overlay');
+  if (custEditOverlay) {
+    custEditOverlay.addEventListener('click', function (e) {
+      if (e.target === custEditOverlay) closeEditCustomerModal();
+    });
+  }
+
+  /* ── ITEM IMPORT PREVIEW MODAL ── */
   const btnPreviewCancel = document.getElementById('btn-preview-cancel');
   if (btnPreviewCancel) {
     btnPreviewCancel.addEventListener('click', hideImportPreview);
@@ -2041,6 +3555,62 @@ function wireEvents() {
   if (btnPreviewConfirm) {
     btnPreviewConfirm.addEventListener('click', handleImportConfirm);
   }
+  const previewModal = document.getElementById('preview-modal-overlay');
+  if (previewModal) {
+    previewModal.addEventListener('click', function (e) {
+      if (e.target === previewModal) hideImportPreview();
+    });
+  }
+
+  /* ── ITEM IMPORT MODE SELECTORS ── */
+  const lblItemUpdate = document.getElementById('lbl-item-mode-update');
+  if (lblItemUpdate) {
+    lblItemUpdate.addEventListener('click', function () { setItemImportMode('update'); });
+  }
+  const lblItemReplace = document.getElementById('lbl-item-mode-replace');
+  if (lblItemReplace) {
+    lblItemReplace.addEventListener('click', function () { setItemImportMode('replace'); });
+  }
+  document.querySelectorAll('input[name="item-import-mode"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      setItemImportMode(this.value);
+    });
+  });
+
+  /* ── CUSTOMER IMPORT PREVIEW MODAL ── */
+  const btnPreviewCustCancel = document.getElementById('btn-preview-customer-cancel');
+  if (btnPreviewCustCancel) {
+    btnPreviewCustCancel.addEventListener('click', hideCustomerImportPreview);
+  }
+  const btnPreviewCustCloseX = document.getElementById('btn-preview-customer-close-x');
+  if (btnPreviewCustCloseX) {
+    btnPreviewCustCloseX.addEventListener('click', hideCustomerImportPreview);
+  }
+  const btnPreviewCustConfirm = document.getElementById('btn-preview-customer-confirm');
+  if (btnPreviewCustConfirm) {
+    btnPreviewCustConfirm.addEventListener('click', handleCustomerImportConfirm);
+  }
+  const previewCustModal = document.getElementById('preview-customer-modal-overlay');
+  if (previewCustModal) {
+    previewCustModal.addEventListener('click', function (e) {
+      if (e.target === previewCustModal) hideCustomerImportPreview();
+    });
+  }
+
+  /* ── CUSTOMER IMPORT MODE SELECTORS ── */
+  const lblCustUpdate = document.getElementById('lbl-customer-mode-update');
+  if (lblCustUpdate) {
+    lblCustUpdate.addEventListener('click', function () { setCustomerImportMode('update'); });
+  }
+  const lblCustReplace = document.getElementById('lbl-customer-mode-replace');
+  if (lblCustReplace) {
+    lblCustReplace.addEventListener('click', function () { setCustomerImportMode('replace'); });
+  }
+  document.querySelectorAll('input[name="customer-import-mode"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      setCustomerImportMode(this.value);
+    });
+  });
 
   /* ── NEW / EDIT ORDER ── */
   document.getElementById('btn-back-from-new').addEventListener('click', async function () {
@@ -2083,7 +3653,7 @@ function wireEvents() {
     if (e.target === modalOverlay) hideModal();
   });
 
-  /* ── BOTTOM NAVIGATION ── */
+  /* ── BOTTOM NAVIGATION (5 TABS) ── */
   const navBtnHome = document.getElementById('nav-btn-home');
   if (navBtnHome) {
     navBtnHome.addEventListener('click', async function () { await renderHome(); });
@@ -2095,6 +3665,10 @@ function wireEvents() {
   const navBtnCatalog = document.getElementById('nav-btn-catalog');
   if (navBtnCatalog) {
     navBtnCatalog.addEventListener('click', openItemMasterScreen);
+  }
+  const navBtnCustomers = document.getElementById('nav-btn-customers');
+  if (navBtnCustomers) {
+    navBtnCustomers.addEventListener('click', openCustomerMasterScreen);
   }
   const navBtnExport = document.getElementById('nav-btn-export');
   if (navBtnExport) {
@@ -2421,6 +3995,12 @@ function hideIOSGuideModal() {
 /* ── BACK BUTTON & POPSTATE HANDLING (MOBILE NATIVE FEEL) ── */
 function setupMobileHistory() {
   window.addEventListener('popstate', function (e) {
+    /* Close sidebar first if open */
+    const sidebar = document.getElementById('app-sidebar');
+    if (sidebar && sidebar.classList.contains('active')) {
+      closeSidebar();
+      return;
+    }
     if (modalOverlay && modalOverlay.classList.contains('active')) {
       hideModal();
       return;
@@ -2428,6 +4008,21 @@ function setupMobileHistory() {
     const previewModal = document.getElementById('preview-modal-overlay');
     if (previewModal && previewModal.classList.contains('active')) {
       hideImportPreview();
+      return;
+    }
+    const previewCustModal = document.getElementById('preview-customer-modal-overlay');
+    if (previewCustModal && previewCustModal.classList.contains('active')) {
+      hideCustomerImportPreview();
+      return;
+    }
+    const itemEditModal = document.getElementById('item-edit-modal-overlay');
+    if (itemEditModal && itemEditModal.classList.contains('active')) {
+      closeEditItemModal();
+      return;
+    }
+    const custEditModal = document.getElementById('customer-edit-modal-overlay');
+    if (custEditModal && custEditModal.classList.contains('active')) {
+      closeEditCustomerModal();
       return;
     }
     const qrModal = document.getElementById('qr-modal-overlay');
@@ -2458,12 +4053,13 @@ async function initApp() {
   try {
     await initDB();
     await loadItemMasterCache();
+    await loadCustomerMasterCache();
     wireEvents();
+    setupCustomerAutocomplete();
     initPWA();
     setupMobileHistory();
     fetchNetworkInfo();        // Initial fetch
     startTunnelPolling();      // Keep polling until public tunnel URL is ready
-
 
     // Check deep-link hash navigation (e.g. from PWA shortcuts)
     const hash = (window.location.hash || '').replace('#', '');
@@ -2473,6 +4069,8 @@ async function initApp() {
       await openSavedOrdersScreen();
     } else if (hash === 'item-master') {
       await openItemMasterScreen();
+    } else if (hash === 'customer-master') {
+      await openCustomerMasterScreen();
     } else if (hash === 'export') {
       openExportScreen();
     } else {
